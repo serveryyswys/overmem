@@ -1,5 +1,7 @@
 // db/LegacyMigration.ts
 /// <reference path="../../types/index.d.ts" />
+const fs = require('fs');
+const path = require('path');
 
 import { logInfo, logError, logWarn } from '../utils/Logger';
 
@@ -115,11 +117,8 @@ export class LegacyMigration {
   /** 确保 bak/ 目录存在，返回是否成功 */
   private static ensureBackupDir(): boolean {
     try {
-      const File = Java.type("java.io.File");
-      const dir = new File(BACKUP_DIR);
-      if (!dir.exists()) {
-        const ok = dir.mkdirs();
-        if (!ok && !dir.exists()) return false;
+      if (!fs.existsSync(BACKUP_DIR)) {
+        fs.mkdirSync(BACKUP_DIR, { recursive: true });
       }
       return true;
     } catch (e: any) {
@@ -404,18 +403,14 @@ export class LegacyMigration {
   }
 
   /** 保存 JSON 文件（自动创建父目录） */
-  public static saveExportFile(json: string, path: string): boolean {
+  public static saveExportFile(json: string, p: string): boolean {
     try {
-      const File = Java.type("java.io.File");
-      const FileWriter = Java.type("java.io.FileWriter");
-      const file = new File(path);
-      const parent = file.getParentFile();
-      if (parent && !parent.exists()) parent.mkdirs();
-      const writer = new FileWriter(file, false);
-      writer.write(json);
-      writer.flush();
-      writer.close();
-      logInfo("Legacy", "已保存: " + path + " (" + json.length + " 字符)");
+      const dir = path.dirname(p);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(p, json, 'utf8');
+      logInfo("Legacy", "已保存: " + p + " (" + json.length + " 字符)");
       return true;
     } catch (e: any) {
       logError("Legacy", "保存失败: " + e.message);

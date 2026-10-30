@@ -333,16 +333,16 @@ Beta 0.2.1 发布！
 ## 开源
 
 该项目基于 GNU General Public License v3.0 (GPL-3.0) 协议开源。
-开源仓库：[https://github.com/yyswys-yjyj/com.operit.overmem](https://github.com/yyswys-yjyj/com.operit.overmem)
+开源仓库：[https://github.com/serveryyswys/overmem](https://github.com/serveryyswys/overmem)
 
 ## Star History
 
-![Star History Chart](https://api.star-history.com/svg?repos=yyswys-yjyj/com.operit.overmem&type=Date)
+![Star History Chart](https://api.star-history.com/svg?repos=serveryyswys/overmem&type=Date)
 
 > 如果你喜欢这个项目，请到 Github 上给它一个 Star ⭐，谢谢
 
 ## Contributors
 
-<a href="https://github.com/yyswys-yjyj/com.operit.overmem/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=yyswys-yjyj/com.operit.overmem" />
+<a href="https://github.com/serveryyswys/overmem/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=serveryyswys/overmem" />
 </a>

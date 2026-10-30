@@ -1,6 +1,8 @@
 // ui/dashboard/pages/SettingsState.ts
 /// <reference path="../../../../types/index.d.ts" />
 
+const fs = require('fs');
+
 import { DashboardState } from '../DashboardState.js';
 import { DatabaseManager } from '../../../db/DatabaseManager.js';
 import { ShortTermMemory } from '../../../memory/ShortTerm.js';
@@ -244,9 +246,7 @@ export class SettingsStateHolder {
 
   refreshLogSize(): void {
     try {
-      const File = Java.type("java.io.File");
-      const f = new File(LOG_FILE_PATH);
-      const sz = f.exists() ? f.length() : 0;
+      const sz = fs.existsSync(LOG_FILE_PATH) ? fs.statSync(LOG_FILE_PATH).size : 0;
       this.patch({ logSizeText: formatBytes(sz) });
     } catch (e) {
       this.patch({ logSizeText: '0 B' });
@@ -255,9 +255,9 @@ export class SettingsStateHolder {
 
   deleteLog(): void {
     try {
-      const File = Java.type("java.io.File");
-      const f = new File(LOG_FILE_PATH);
-      if (f.exists()) f.delete();
+      if (fs.existsSync(LOG_FILE_PATH)) {
+        fs.unlinkSync(LOG_FILE_PATH);
+      }
       this.patch({ logSizeText: '0 B' });
       this.dashboard.showBanner('日志已删除', 'success');
     } catch (e: any) {

@@ -45,6 +45,7 @@ export class DatabaseManager {
   private static instance: DatabaseManager | null = null;
   private dbPath: string;
   private connection: any = null;
+  private initialized: boolean = false;
 
   private constructor(dbPath: string) {
     this.dbPath = dbPath;
@@ -123,14 +124,18 @@ export class DatabaseManager {
   // ============================================
 
   public initialize(): boolean {
+    if (this.initialized) return true;
+
     try {
-      logInfo("DB", "初始化数据库 v4（链式）...");
+      logInfo("DB", "初始化数据库 v4...");
       this.ensureDirectory();
 
       const conn = this.getConnection();
       Migration.run(conn);
 
       this.initDefaultConfig();
+
+      this.initialized = true;
       logInfo("DB", "数据库 v4 初始化完成");
       return true;
     } catch (err: any) {
@@ -187,6 +192,7 @@ export class DatabaseManager {
       const ok = Migration.forceMigrateToV4(conn);
       if (ok) {
         this.initDefaultConfig();
+        this.initialized = true;
       }
       return ok;
     } catch (e: any) {

@@ -28,15 +28,78 @@ const injector = new MemoryInjector();
 // XML 剥离
 // ============================================
 
-function stripMemoryAttachment(content: string): string {
+/**
+ * 剥离 Operit 的 XML 标签，替换成提示语。
+ *
+ * - <tool_result_XXXX name="xxx" ...>...</tool_result_XXXX> → \n[工具返回：xxx]\n
+ * - <tool_XXXX name="xxx" ...>...</tool_XXXX>               → \n[工具调用：xxx]\n
+ * - 其余 XML（连内容）→ 丢弃
+ *
+ * 先剥 result 再剥 call：两者标签名都以 tool_ 开头，
+ * 用负向前瞻 (?!result_) 排除 tool_result_* 被 call 的正则误匹配。
+ */
+function stripOperitXml(content: string): string {
   if (!content) return '';
-  return String(content)
-    .replace(/<attachment\b[^>]*>[\s\S]*?<\/attachment>/gi, '')
-    .replace(/<attachment\b[^>]*\/>/gi, '')
-    .replace(/<workspace_attachment\b[^>]*>[\s\S]*?<\/workspace_attachment>/gi, '')
-    .replace(/<reply_to\b[^>]*>[\s\S]*?<\/reply_to>/gi, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+
+  let s = String(content);
+
+  // 1. 工具返回
+  s = s.replace(
+    /<tool_result_[\w]+\b([^>]*)>[\s\S]*?<\/tool_result_[\w]+>/g,
+    (_m, attrs) => {
+      const name = extractAttr(attrs, 'name') || 'unknown';
+      return `\n[工具返回：${name}]\n`;
+    }
+  );
+
+  // 2. 工具调用
+  s = s.replace(
+    /<tool_(?!result_)[\w]+\b([^>]*)>[\s\S]*?<\/tool_(?!result_)[\w]+>/g,
+    (_m, attrs) => {
+      const name = extractAttr(attrs, 'name') || 'unknown';
+      return `\n[工具调用：${name}]\n`;
+    }
+  );
+
+  // 3. 自闭合的工具标签（防御性）
+  s = s.replace(
+    /<tool_result_[\w]+\b([^>]*)\/>/g,
+    (_m, attrs) => {
+      const name = extractAttr(attrs, 'name') || 'unknown';
+      return `\n[工具返回：${name}]\n`;
+    }
+  );
+  s = s.replace(
+    /<tool_(?!result_)[\w]+\b([^>]*)\/>/g,
+    (_m, attrs) => {
+      const name = extractAttr(attrs, 'name') || 'unknown';
+      return `\n[工具调用：${name}]\n`;
+    }
+  );
+
+  // 4. 其余 XML：连内容一起丢弃
+  s = s.replace(/<[a-zA-Z][\w:-]*\b[^>]*>[\s\S]*?<\/[a-zA-Z][\w:-]*>/g, '');
+  s = s.replace(/<[a-zA-Z][\w:-]*\b[^>]*\/>/g, '');
+
+  // 5. 合并多余空行、去掉首尾空白
+  s = s.replace(/\n{3,}/g, '\n\n').trim();
+
+  return s;
+}
+
+/** 从属性字符串里提取某个属性的值，支持双引号和单引号 */
+function extractAttr(attrs: string, key: string): string {
+  if (!attrs) return '';
+  const dq = new RegExp('(?:^|\\s)' + key + '\\s*=\\s*"([^"]*)"').exec(attrs);
+  if (dq) return dq[1];
+  const sq = new RegExp("(?:^|\\s)" + key + "\\s*=\\s*'([^']*)'").exec(attrs);
+  if (sq) return sq[1];
+  return '';
+}
+
+
+function stripMemoryAttachment(content: string): string {
+  return stripOperitXml(content);
 }
 
 // ============================================

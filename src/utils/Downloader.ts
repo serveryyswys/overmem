@@ -1,6 +1,9 @@
 // utils/Downloader.ts
 /// <reference path="../../types/index.d.ts" />
 
+const fs = require('fs');
+const path = require('path');
+
 import { logInfo, logError } from './Logger.js';
 
 export interface DownloadProgress {
@@ -25,12 +28,12 @@ export async function downloadFile(
   onProgress?: ProgressCallback,
   totalBytesHint: number = -1
 ): Promise<string> {
-  const File = Java.type('java.io.File');
-  const destFile = new File(destPath);
-  const parent = destFile.getParentFile();
-  if (parent && !parent.exists()) parent.mkdirs();
-  if (destFile.exists()) {
-    try { destFile.delete(); } catch (_) {}
+  const parentDir = path.dirname(destPath);
+  if (!fs.existsSync(parentDir)) {
+    fs.mkdirSync(parentDir, { recursive: true });
+  }
+  if (fs.existsSync(destPath)) {
+    try { fs.unlinkSync(destPath); } catch (_) {}
   }
 
   const knownTotal = totalBytesHint > 0 ? totalBytesHint : -1;
@@ -43,12 +46,20 @@ export async function downloadFile(
   let downloadDone = false;
   let lastEmittedBytes = -1;
 
+  const getSize = (): number => {
+    try {
+      if (!fs.existsSync(destPath)) return 0;
+      return fs.statSync(destPath).size;
+    } catch (_) {
+      return 0;
+    }
+  };
+
   if (onProgress) {
     pollTimer = setInterval(() => {
       if (downloadDone) return;
       try {
-        if (!destFile.exists()) return;
-        const currentBytes = destFile.length();
+        const currentBytes = getSize();
         if (currentBytes <= 0) return;
         // 大小没变化就不重复回调
         if (currentBytes === lastEmittedBytes) return;
@@ -94,11 +105,11 @@ export async function downloadFile(
       pollTimer = null;
     }
 
-    if (!destFile.exists()) {
+    if (!fs.existsSync(destPath)) {
       throw new Error('下载后文件不存在: ' + destPath);
     }
 
-    const finalSize = destFile.length();
+    const finalSize = getSize();
     logInfo('Downloader', `下载完成: ${destPath} (${finalSize} bytes)`);
 
     if (onProgress) {

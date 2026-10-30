@@ -1,4 +1,6 @@
 /// <reference path="../../types/index.d.ts" />
+const fs = require('fs');
+const path = require('path');
 
 // ============================================
 // 配置管理器 - 处理 .setuplock + settings.json
@@ -36,42 +38,31 @@ function logError(msg: string): void {
 // 文件操作（Java Bridge）
 // ============================================
 
-function fileExists(path: string): boolean {
+// ============================================
+// 文件操作（node.operit fs）
+// ============================================
+
+function fileExists(p: string): boolean {
   try {
-    const File = Java.type("java.io.File");
-    const file = new File(path);
-    return file.exists();
+    return fs.existsSync(p);
   } catch (e) {
     return false;
   }
 }
 
-function deleteFile(path: string): boolean {
+function deleteFile(p: string): boolean {
   try {
-    const File = Java.type("java.io.File");
-    const file = new File(path);
-    return file.delete();
+    fs.unlinkSync(p);
+    return true;
   } catch (e) {
     return false;
   }
 }
 
-function readFile(path: string): string | null {
+function readFile(p: string): string | null {
   try {
-    const File = Java.type("java.io.File");
-    const FileReader = Java.type("java.io.FileReader");
-    const BufferedReader = Java.type("java.io.BufferedReader");
-    
-    const file = new File(path);
-    if (!file.exists()) return null;
-    
-    const reader = new BufferedReader(new FileReader(file));
-    let content = "";
-    let line;
-    while ((line = reader.readLine()) !== null) {
-      content += line + "\n";
-    }
-    reader.close();
+    if (!fs.existsSync(p)) return null;
+    const content = fs.readFileSync(p, 'utf8');
     return content.trim();
   } catch (e: any) {
     logError("读取文件失败: " + e.message);
@@ -79,21 +70,13 @@ function readFile(path: string): string | null {
   }
 }
 
-function writeFile(path: string, content: string): boolean {
+function writeFile(p: string, content: string): boolean {
   try {
-    const File = Java.type("java.io.File");
-    const FileWriter = Java.type("java.io.FileWriter");
-    
-    const file = new File(path);
-    const parent = file.getParentFile();
-    if (parent && !parent.exists()) {
-      parent.mkdirs();
+    const dir = path.dirname(p);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
     }
-    
-    const writer = new FileWriter(file, false);
-    writer.write(content);
-    writer.flush();
-    writer.close();
+    fs.writeFileSync(p, content, 'utf8');
     return true;
   } catch (e: any) {
     logError("写入文件失败: " + e.message);
@@ -246,13 +229,14 @@ export function saveSettings(settings: OverMemSettings): boolean {
  */
 export function markSetupComplete(): boolean {
   try {
-    const File = Java.type("java.io.File");
-    const file = new File(SETUP_LOCK_FILE);
-    const parent = file.getParentFile();
-    if (parent && !parent.exists()) {
-      parent.mkdirs();
+    const dir = path.dirname(SETUP_LOCK_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
     }
-    return file.createNewFile() || file.exists();
+    if (!fs.existsSync(SETUP_LOCK_FILE)) {
+      fs.writeFileSync(SETUP_LOCK_FILE, '', 'utf8');
+    }
+    return true;
   } catch (e: any) {
     logError("创建 .setuplock 失败: " + e.message);
     return false;

@@ -284,16 +284,16 @@ User guide: [https://doc.xclcs.top/9408796m0](https://doc.xclcs.top/9408796m0)
 ## License
 
 GNU General Public License v3.0 (GPL-3.0).
-Repository: [https://github.com/yyswys-yjyj/com.operit.overmem](https://github.com/yyswys-yjyj/com.operit.overmem)
+Repository: [https://github.com/serveryyswys/overmem](https://github.com/serveryyswys/overmem)
 
 ## Star History
 
-![Star History Chart](https://api.star-history.com/svg?repos=yyswys-yjyj/com.operit.overmem&type=Date)
+![Star History Chart](https://api.star-history.com/svg?repos=serveryyswys/overmem&type=Date)
 
 > If you like this project, please give it a Star ⭐ on GitHub.
 
 ## Contributors
 
-<a href="https://github.com/yyswys-yjyj/com.operit.overmem/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=yyswys-yjyj/com.operit.overmem" />
+<a href="https://github.com/serveryyswys/overmem/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=serveryyswys/overmem" />
 </a>

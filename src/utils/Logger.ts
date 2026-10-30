@@ -1,4 +1,8 @@
+// utils/Logger.ts
 /// <reference path="../../types/index.d.ts" />
+
+const fs = require('fs');
+const path = require('path');
 
 // ============================================
 // 日志级别
@@ -37,23 +41,17 @@ export class Logger {
 
   private initFile(): void {
     try {
-      const File = Java.type("java.io.File");
-      const FileWriter = Java.type("java.io.FileWriter");
-      
-      const file = new File(this.logFilePath);
-      const parent = file.getParentFile();
-      if (parent && !parent.exists()) {
-        parent.mkdirs();
+      const dir = path.dirname(this.logFilePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
       }
-      
-      const writer = new FileWriter(file, true);
-      writer.write("\n\n");
-      writer.write("=".repeat(60) + "\n");
-      writer.write("OverMem 日志启动: " + new Date().toString() + "\n");
-      writer.write("=".repeat(60) + "\n");
-      writer.flush();
-      writer.close();
-      
+      const banner =
+        "\n\n" +
+        "=".repeat(60) + "\n" +
+        "OverMem 日志启动: " + new Date().toString() + "\n" +
+        "=".repeat(60) + "\n";
+      fs.appendFileSync(this.logFilePath, banner, 'utf8');
+
       NativeInterface.logInfo("[OverMem] 日志文件: " + this.logFilePath);
     } catch (error: any) {
       NativeInterface.logError("[OverMem] 初始化日志文件失败: " + error.message);
@@ -67,9 +65,9 @@ export class Logger {
     const timestamp = new Date().toISOString();
     const levelStr = LogLevel[level];
     const entry = "[" + timestamp + "] [" + levelStr + "] [" + tag + "] " + message;
-    
+
     this.buffer.push(entry);
-    
+
     if (this.buffer.length >= this.maxBufferSize) {
       this.flush();
     }
@@ -77,20 +75,10 @@ export class Logger {
 
   private flush(): void {
     if (this.buffer.length === 0) return;
-    
+
     try {
-      const File = Java.type("java.io.File");
-      const FileWriter = Java.type("java.io.FileWriter");
-      
-      const file = new File(this.logFilePath);
-      const writer = new FileWriter(file, true);
-      
-      for (let i = 0; i < this.buffer.length; i++) {
-        writer.write(this.buffer[i] + "\n");
-      }
-      
-      writer.flush();
-      writer.close();
+      const text = this.buffer.join("\n") + "\n";
+      fs.appendFileSync(this.logFilePath, text, 'utf8');
       this.buffer = [];
     } catch (error: any) {
       NativeInterface.logError("[OverMem] 刷盘失败: " + error.message);
@@ -131,7 +119,7 @@ export class Logger {
 }
 
 // ============================================
-// 导出便捷函数 - 使用命名导出避免冲突
+// 导出便捷函数
 // ============================================
 
 export function logDebug(tag: string, message: string): void {
