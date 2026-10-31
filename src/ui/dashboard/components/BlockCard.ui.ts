@@ -2,11 +2,7 @@
 /// <reference path="../../../../types/index.d.ts" />
 
 import { MemoryNode, MemoryLevel } from '../../../db/models.js';
-
-const LEVEL_EVENT_COLOR  = '#4CAF50';   // 事件（short）
-const LEVEL_THEME_COLOR  = '#FF9800';   // 主题（mid）
-const LEVEL_NARRATIVE_COLOR = '#9C27B0'; // 叙事（long）
-const STATE_TRASH_COLOR = '#9E9E9E';
+import { LEVEL_EVENT_COLOR, LEVEL_THEME_COLOR, LEVEL_NARRATIVE_COLOR, STATE_TRASH_COLOR, AROUSAL_COLOR } from '../../theme/Palette.js';
 
 export interface BlockCardProps {
   level: MemoryLevel;
@@ -87,7 +83,7 @@ export function BlockCard(ctx: ComposeDslContext, props: BlockCardProps): Compos
       ctx.UI.Icon({
         name: arousal > 0.6 ? 'favorite' : 'favorite_border',
         size: 12,
-        tint: '#F44336'
+        tint: AROUSAL_COLOR
       })
     ]));
   }

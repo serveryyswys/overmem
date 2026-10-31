@@ -12,7 +12,7 @@ import { WelcomePage } from './WelcomePage.ui.js';
 import { OverviewPage } from './OverviewPage.ui.js';
 import { SessionsListPage } from './SessionsListPage.ui.js';
 import { SettingsPage, SettingsPageEvents } from './SettingsPage.ui.js';
-import { AddonsTab } from './AddonsPage.ui.js';
+import { AddonsTab, AddonsPageEvents } from './AddonsPage.ui.js';
 import { IconTextButton } from '../components/Common.ui.js';
 
 export interface HomePageEvents {
@@ -25,6 +25,7 @@ export interface HomePageEvents {
   onRefreshSessions: () => void | Promise<void>;
   onOpenSession: (sessionId: string, title: string) => void;
   settings: SettingsPageEvents;
+  addons: AddonsPageEvents;
   onRefreshAddons: () => void | Promise<void>;
 }
 
@@ -96,7 +97,7 @@ export function HomePage(
       : welcome.homeTab === 'sessions'
         ? renderSessionsTab(ctx, welcome, overview, sessions, events)
         : welcome.homeTab === 'addons'
-          ? AddonsTab(ctx, addons)
+          ? AddonsTab(ctx, addons, events.addons)
           : SettingsPage(ctx, settings, events.settings)
   ]);
 }

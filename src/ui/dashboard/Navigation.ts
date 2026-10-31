@@ -11,7 +11,9 @@ export type PageType =
   | 'about'
   | 'open_source'
   | 'addons'
-  | 'legacy_warning';
+  | 'legacy_warning'
+  | 'message_groups'
+  | 'message_group_edit';
 
 export interface NavEntry {
   page: PageType;

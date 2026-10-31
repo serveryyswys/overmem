@@ -94,7 +94,7 @@ fun OpenSourceContent(onBack: () -> Unit) {
                     license = "GPL-3.0",
                     licenseColor = LICENSE_GPL,
                     usage = "本项目自身，为 OverMem 记忆库提供 Android 独立管理界面。",
-                    url = "https://github.com/yyswys-yjyj/com.operit.overmem"
+                    url = "https://github.com/serveryyswys/overmem"
                 ))
             }
 
@@ -115,7 +115,7 @@ fun OpenSourceContent(onBack: () -> Unit) {
                     license = "GPL-3.0",
                     licenseColor = LICENSE_GPL,
                     usage = "Operit AI 平台上的记忆管理插件。本 App 与插件共享 mem.db 与 settings.json，实现数据互通。",
-                    url = "https://github.com/yyswys-yjyj/com.operit.overmem"
+                    url = "https://github.com/serveryyswys/overmem"
                 ))
             }
             item {

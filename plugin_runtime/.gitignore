@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+.venv/
+
+# 管理后台静态页需要随仓库分发（根目录 .gitignore 的 *.html 会把它一起忽略）
+!overmem_runtime/static/index.html
+
+# runtime data written by the service
+data/
+plugins/*
+!plugins/.gitkeep
+*.log
+runtime.pid

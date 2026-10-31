@@ -4,9 +4,7 @@
 import { DetailUiState } from './DetailState.js';
 import { MemoryLevel } from '../../../db/models.js';
 import { getLevelColor, getLevelIcon, getLevelLabel } from '../components/BlockCard.ui.js';
-
-const LEVEL_THEME_COLOR = '#FF9800';
-const LEVEL_EVENT_COLOR = '#4CAF50';
+import { LEVEL_EVENT_COLOR, LEVEL_THEME_COLOR, AROUSAL_COLOR, STATE_TRASH_COLOR } from '../../theme/Palette.js';
 
 export interface DetailPageEvents {
   onBack: () => void;
@@ -134,11 +132,11 @@ export function DetailPage(
   if (block.arousal > 0.1) {
     metaChildren.push(ctx.UI.Spacer({ height: 4 }));
     metaChildren.push(ctx.UI.Row({ verticalAlignment: 'center' }, [
-      ctx.UI.Icon({ name: 'favorite', size: 14, tint: '#F44336' }),
+      ctx.UI.Icon({ name: 'favorite', size: 14, tint: AROUSAL_COLOR }),
       ctx.UI.Spacer({ width: 4 }),
       ctx.UI.Text({
         text: '情绪强度 ' + block.arousal.toFixed(2),
-        fontSize: 12, color: '#F44336'
+        fontSize: 12, color: AROUSAL_COLOR
       })
     ]));
   }
@@ -146,9 +144,9 @@ export function DetailPage(
   if (block.trashedAt) {
     metaChildren.push(ctx.UI.Spacer({ height: 4 }));
     metaChildren.push(ctx.UI.Row({ verticalAlignment: 'center' }, [
-      ctx.UI.Icon({ name: 'delete_outline', size: 14, tint: '#9E9E9E' }),
+      ctx.UI.Icon({ name: 'delete_outline', size: 14, tint: STATE_TRASH_COLOR }),
       ctx.UI.Spacer({ width: 4 }),
-      ctx.UI.Text({ text: '状态: 已废弃', fontSize: 12, color: '#9E9E9E' })
+      ctx.UI.Text({ text: '状态: 已废弃', fontSize: 12, color: STATE_TRASH_COLOR })
     ]));
   }
 

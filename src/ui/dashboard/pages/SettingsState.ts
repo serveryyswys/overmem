@@ -5,13 +5,14 @@ const fs = require('fs');
 
 import { DashboardState } from '../DashboardState.js';
 import { DatabaseManager } from '../../../db/DatabaseManager.js';
+import { MessageGroupManager } from '../../../db/MessageGroupManager.js';
 import { ShortTermMemory } from '../../../memory/ShortTerm.js';
-import { PersonalityHelper } from '../../../utils/PersonalityHelper.js';
 import { loadSettings, resetConfig } from '../../../utils/ConfigManager.js';
 import { downloadFile } from '../../../utils/Downloader.js';
 import { httpGetWithTimeout } from '../../../utils/HttpHelper.js';
 import { formatBytes, formatEta, formatSpeed, buildApkUrl } from '../../../utils/Formatter.js';
 import { logInfo, logError, logWarn } from '../../../utils/Logger.js';
+import { sanError } from '../../../utils/Sanitizer.js';
 
 const DB_PATH = "/storage/emulated/0/Download/Operit/overmem/mem.db";
 const LOG_FILE_PATH = "/storage/emulated/0/Download/Operit/overmem/log.txt";
@@ -33,13 +34,8 @@ export interface SettingsUiState {
   recallEnabled: boolean;
   noiseTemperature: number;
   synapticFailureEnabled: boolean;
-  passthroughMode: 'none' | 'role_card' | 'global';
-  personalityMode: 'auto' | 'manual';
-  personalityCardId: string;
-  personalityName: string;
-  personalityCustomText: string;
-  availableCards: { id: string; name: string }[];
-  isLoadingCards: boolean;
+  messageGroupCount: number;
+  messageGroupInvalidCount: number;
   debugMode: boolean;
   logSizeText: string;
   pendingInfoText: string;
@@ -68,9 +64,7 @@ export class SettingsStateHolder {
     shortThreshold: 20, midThreshold: 40, longThreshold: 20,
     injectTopN: 5, activeRatio: 0.7, recallEnabled: true,
     noiseTemperature: 0.3, synapticFailureEnabled: true,
-    passthroughMode: 'none',
-    personalityMode: 'auto', personalityCardId: '', personalityName: '',
-    personalityCustomText: '', availableCards: [], isLoadingCards: false,
+    messageGroupCount: 0, messageGroupInvalidCount: 0,
     debugMode: false, logSizeText: '0 B', pendingInfoText: '空',
     aiBasicUrl: '', aiModel: '',
     clientInstalled: false, clientVersionName: '', clientVersionCode: 0,
@@ -116,9 +110,17 @@ export class SettingsStateHolder {
       const c = db.getConfig();
       const ai = loadSettings();
 
-      let mode: 'none' | 'role_card' | 'global' = 'none';
-      if (c.globalPassthrough) mode = 'global';
-      else if (c.sessionPassthrough) mode = 'role_card';
+      let groupCount = 0;
+      let groupInvalid = 0;
+      try {
+        const mgr = MessageGroupManager.getInstance(db);
+        const all = mgr.listAll();
+        const enabled = mgr.listEnabled();
+        groupCount = enabled.length;
+        groupInvalid = all.filter(g => g.enabled && !mgr.isValid(g)).length;
+      } catch (e: any) {
+        logError("Settings", `读取消息组统计失败: ${sanError(e)}`);
+      }
 
       this.patch({
         shortThreshold: c.shortThreshold || 20,
@@ -129,11 +131,8 @@ export class SettingsStateHolder {
         recallEnabled: c.recallEnabled ?? true,
         noiseTemperature: c.noiseTemperature ?? 0.3,
         synapticFailureEnabled: c.synapticFailureEnabled ?? true,
-        passthroughMode: mode,
-        personalityMode: c.personalityMode || 'auto',
-        personalityCardId: c.personalityCardId || '',
-        personalityName: c.personalityName || '',
-        personalityCustomText: c.personalityCustomText || '',
+        messageGroupCount: groupCount,
+        messageGroupInvalidCount: groupInvalid,
         debugMode: c.debugMode ?? false,
         aiBasicUrl: ai?.basicUrl || '',
         aiModel: ai?.model || ''
@@ -155,12 +154,6 @@ export class SettingsStateHolder {
       c.recallEnabled = this.state.recallEnabled;
       c.noiseTemperature = this.state.noiseTemperature;
       c.synapticFailureEnabled = this.state.synapticFailureEnabled;
-      c.sessionPassthrough = (this.state.passthroughMode === 'role_card');
-      c.globalPassthrough = (this.state.passthroughMode === 'global');
-      c.personalityMode = this.state.personalityMode;
-      c.personalityCardId = this.state.personalityCardId;
-      c.personalityCustomText = this.state.personalityCustomText;
-      c.personalityName = this.state.personalityName;
       c.debugMode = this.state.debugMode;
       db.saveConfig(c);
       this.dashboard.showBanner('配置已保存', 'success');
@@ -172,36 +165,29 @@ export class SettingsStateHolder {
   }
 
   // ============================================
-  // 人格卡
+  // 消息组策略
   // ============================================
 
-  async loadCards(): Promise<void> {
-    this.patch({ isLoadingCards: true });
+  manageMessageGroups(): void {
+    this.dashboard.nav.navigate('message_groups');
+  }
+
+  refreshMessageGroups(): void {
     try {
-      const helper = PersonalityHelper.getInstance();
-      const briefs = await helper.getCharacterCardBriefs();
-      const cards = briefs.map((c: any) => ({ id: c.id, name: c.name }));
-      const first = cards[0];
+      const db = DatabaseManager.getInstance(DB_PATH);
+      const mgr = MessageGroupManager.getInstance(db);
+      const all = mgr.listAll();
+      const enabled = mgr.listEnabled();
+      const invalid = all.filter(g => g.enabled && !mgr.isValid(g)).length;
       this.patch({
-        isLoadingCards: false,
-        availableCards: cards,
-        personalityCardId: this.state.personalityCardId || (first ? first.id : ''),
-        personalityName: this.state.personalityName || (first ? first.name : '')
+        messageGroupCount: enabled.length,
+        messageGroupInvalidCount: invalid,
       });
-      logInfo("Settings", "获取 " + cards.length + " 个角色卡");
+      logInfo("Settings",
+        `刷新消息组统计：有效 ${enabled.length}，无效 ${invalid}`);
     } catch (e: any) {
-      logError("Settings", "加载角色卡失败: " + e.message);
-      this.dashboard.showBanner('加载角色卡失败: ' + e.message, 'error');
-      this.patch({ isLoadingCards: false });
+      logError("Settings", `刷新消息组统计失败: ${sanError(e)}`);
     }
-  }
-
-  clearCards(): void {
-    this.patch({ availableCards: [], personalityCardId: '' });
-  }
-
-  selectCard(id: string, name: string): void {
-    this.patch({ personalityCardId: id, personalityName: name });
   }
 
   // ============================================

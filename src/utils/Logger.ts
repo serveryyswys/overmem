@@ -4,20 +4,12 @@
 const fs = require('fs');
 const path = require('path');
 
-// ============================================
-// 日志级别
-// ============================================
-
 export enum LogLevel {
   DEBUG = 0,
   INFO = 1,
   WARN = 2,
   ERROR = 3
 }
-
-// ============================================
-// 日志管理器
-// ============================================
 
 export class Logger {
   private static instance: Logger | null = null;
@@ -39,6 +31,14 @@ export class Logger {
     return Logger.instance;
   }
 
+  private nativeInfo(msg: string): void {
+    try { NativeInterface.logInfo(msg); } catch (_) {}
+  }
+
+  private nativeError(msg: string): void {
+    try { NativeInterface.logError(msg); } catch (_) {}
+  }
+
   private initFile(): void {
     try {
       const dir = path.dirname(this.logFilePath);
@@ -51,10 +51,9 @@ export class Logger {
         "OverMem 日志启动: " + new Date().toString() + "\n" +
         "=".repeat(60) + "\n";
       fs.appendFileSync(this.logFilePath, banner, 'utf8');
-
-      NativeInterface.logInfo("[OverMem] 日志文件: " + this.logFilePath);
+      this.nativeInfo("[OverMem] 日志文件: " + this.logFilePath);
     } catch (error: any) {
-      NativeInterface.logError("[OverMem] 初始化日志文件失败: " + error.message);
+      this.nativeError("[OverMem] 初始化日志文件失败: " + error.message);
     }
   }
 
@@ -81,7 +80,7 @@ export class Logger {
       fs.appendFileSync(this.logFilePath, text, 'utf8');
       this.buffer = [];
     } catch (error: any) {
-      NativeInterface.logError("[OverMem] 刷盘失败: " + error.message);
+      this.nativeError("[OverMem] 刷盘失败: " + error.message);
     }
   }
 
@@ -91,17 +90,17 @@ export class Logger {
 
   public info(tag: string, message: string): void {
     this.log(LogLevel.INFO, tag, message);
-    NativeInterface.logInfo("[OverMem] " + message);
+    this.nativeInfo("[OverMem] " + message);
   }
 
   public warn(tag: string, message: string): void {
     this.log(LogLevel.WARN, tag, message);
-    NativeInterface.logInfo("[OverMem] [Warn] " + message);
+    this.nativeInfo("[OverMem] [Warn] " + message);
   }
 
   public error(tag: string, message: string): void {
     this.log(LogLevel.ERROR, tag, message);
-    NativeInterface.logError("[OverMem] [Error] " + message);
+    this.nativeError("[OverMem] [Error] " + message);
   }
 
   public static stringify(obj: any): string {
@@ -117,10 +116,6 @@ export class Logger {
     this.flush();
   }
 }
-
-// ============================================
-// 导出便捷函数
-// ============================================
 
 export function logDebug(tag: string, message: string): void {
   Logger.getInstance().debug(tag, message);

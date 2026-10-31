@@ -4,8 +4,7 @@
 import { EditUiState } from './EditState.js';
 import { getLevelLabel } from '../components/BlockCard.ui.js';
 import { IconTextButton } from '../components/Common.ui.js';
-
-const LEVEL_MID_COLOR = '#FF9800';
+import { LEVEL_THEME_COLOR } from '../../theme/Palette.js';
 
 export interface EditPageEvents {
   onBack: () => void;
@@ -63,9 +62,9 @@ export function EditPage(
     }));
     editChildren.push(ctx.UI.Spacer({ height: 12 }));
     editChildren.push(ctx.UI.Row({ verticalAlignment: 'center' }, [
-      ctx.UI.Icon({ name: 'smart_toy', size: 16, tint: LEVEL_MID_COLOR }),
+      ctx.UI.Icon({ name: 'smart_toy', size: 16, tint: LEVEL_THEME_COLOR }),
       ctx.UI.Spacer({ width: 4 }),
-      ctx.UI.Text({ text: 'AI 回复', fontSize: 13, color: LEVEL_MID_COLOR, fontWeight: 'bold' })
+      ctx.UI.Text({ text: 'AI 回复', fontSize: 13, color: LEVEL_THEME_COLOR, fontWeight: 'bold' })
     ]));
     editChildren.push(ctx.UI.Spacer({ height: 4 }));
     editChildren.push(ctx.UI.TextField({

@@ -6,48 +6,35 @@ import { logInfo, logError, logWarn, logDebug } from '../utils/Logger.js';
 
 export class Migration {
 
-  public static run(conn: any): boolean {
-    logInfo("DB", "开始数据库迁移检查...");
+  /**
+   * 只做结构检查：建表、补列、建索引、诊断。
+   * 不迁移数据。
+   */
+  public static ensureSchema(conn: any): boolean {
+    logInfo("DB", "开始结构检查...");
     try {
-
       for (const table of EXPECTED_TABLES) {
         this.ensureTable(conn, table);
       }
-
       this.ensureIndexes(conn);
       this.runDiagnostics(conn);
-
-      logInfo("DB", "数据库迁移检查完成");
+      logInfo("DB", "结构检查完成");
       return true;
     } catch (e: any) {
-      logError("DB", "数据库迁移失败: " + e.message);
+      logError("DB", "结构检查失败: " + e.message);
       return false;
     }
   }
 
-  // ============================================
-  // 新建：只建 v4 表，不删旧表
-  //
-  // 供 LegacyMigration 使用：
-  //   1. ensureV4Tables(conn)  → 建 nodes / edges / chain_meta / injection_log
-  //   2. 插入迁移数据
-  //   3. 成功后 dropLegacyTables(conn)
-  //
-  // 如果插入中途失败，v3 旧表保持完好，用户可以重试或从 bak 恢复。
-  // ============================================
-
+  /** @deprecated 用 MigrationChain.runFullMigration 替代，仅为 LegacyWarningState 保留 */
   public static ensureV4Tables(conn: any): void {
-    logInfo("DB", "ensureV4Tables：创建/补齐 v4 表结构（不动旧表）");
     for (const table of EXPECTED_TABLES) {
       this.ensureTable(conn, table);
     }
     this.ensureIndexes(conn);
   }
 
-  // ============================================
-  // 清理旧表（改为 public）
-  // ============================================
-
+  /** @deprecated 用 MigrationChain.runFullMigration 替代，仅为 LegacyWarningState 保留 */
   public static dropLegacyTables(conn: any): void {
     for (const name of LEGACY_TABLES) {
       try {
@@ -61,10 +48,6 @@ export class Migration {
     }
   }
 
-  // ============================================
-  // 表
-  // ============================================
-
   private static ensureTable(conn: any, table: TableDef): void {
     if (!this.tableExists(conn, table.name)) {
       this.createTable(conn, table);
@@ -73,14 +56,13 @@ export class Migration {
     }
 
     const existing = this.getExistingColumns(conn, table.name);
-    const expectedNames = table.columns.map(c => c.name);
-
     for (const col of table.columns) {
       if (existing.indexOf(col.name) === -1) {
         this.addColumn(conn, table.name, col);
       }
     }
 
+    const expectedNames = table.columns.map(c => c.name);
     const extra = existing.filter(n => expectedNames.indexOf(n) === -1);
     if (extra.length > 0) {
       logWarn("DB", `表 ${table.name} 存在多余列（保留）: ` + extra.join(', '));
@@ -148,10 +130,6 @@ export class Migration {
     }
   }
 
-  // ============================================
-  // 索引
-  // ============================================
-
   private static ensureIndexes(conn: any): void {
     for (const sql of EXPECTED_INDEXES) {
       try {
@@ -161,10 +139,6 @@ export class Migration {
       }
     }
   }
-
-  // ============================================
-  // 状态检测
-  // ============================================
 
   private static runDiagnostics(conn: any): void {
     logInfo("DB", "—— 数据库状态检测 ——");
@@ -253,42 +227,5 @@ export class Migration {
     }
 
     logInfo("DB", "—— 检测完成 ——");
-  }
-
-  // ============================================
-  // 旧库检测 / 强制迁移
-  // ============================================
-
-  public static isLegacyV3Database(conn: any): boolean {
-    const v3Tables = [
-      'short_segments',
-      'short_blocks',
-      'mid_blocks',
-      'long_blocks',
-      'counters',
-      'pending_segments'
-    ];
-    for (const t of v3Tables) {
-      if (this.tableExists(conn, t)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  public static forceMigrateToV4(conn: any): boolean {
-    try {
-      logInfo("DB", "强制迁移到 v4：删除旧表...");
-      this.dropLegacyTables(conn);
-      for (const table of EXPECTED_TABLES) {
-        this.ensureTable(conn, table);
-      }
-      this.ensureIndexes(conn);
-      logInfo("DB", "强制迁移完成");
-      return true;
-    } catch (e: any) {
-      logError("DB", "强制迁移失败: " + e.message);
-      return false;
-    }
   }
 }

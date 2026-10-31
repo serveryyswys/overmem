@@ -18,13 +18,13 @@ object AppVersion {
     val fullName: String get() = BuildConfig.VERSION_NAME
     val versionCode: Int get() = BuildConfig.VERSION_CODE
 
-    const val REPO_URL = "https://github.com/yyswys-yjyj/com.operit.overmem"
+    const val REPO_URL = "https://github.com/serveryyswys/overmem"
 
     // 检查更新源，按顺序尝试
     val UPDATE_URLS = listOf(
-        "https://raw.githubusercontent.com/yyswys-yjyj/com.operit.overmem/refs/heads/main/api/manifest.json",
-        "https://cdn.jsdelivr.net/gh/yyswys-yjyj/com.operit.overmem@main/api/manifest.json",
-        "https://git.repo.archive.serveryyswys.top/yyswys-yjyj/com.operit.overmem/raw/branch/main/api/manifest.json"
+        "https://raw.githubusercontent.com/serveryyswys/overmem/refs/heads/main/api/manifest.json",
+        "https://cdn.jsdelivr.net/gh/serveryyswys/overmem@main/api/manifest.json",
+        "https://git.repo.archive.serveryyswys.top/serveryyswys/overmem/raw/branch/main/api/manifest.json"
     )
 
     fun typeLabel(t: VersionType): String = when (t) {

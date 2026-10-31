@@ -4,6 +4,7 @@
 import { DatabaseManager } from '../db/DatabaseManager.js';
 import { NodeManager } from '../db/NodeManager.js';
 import { EdgeManager } from '../db/EdgeManager.js';
+import { MessageGroupManager } from '../db/MessageGroupManager.js';
 import { PersonalityHelper } from '../utils/PersonalityHelper.js';
 import { callAI, buildPersonaSystemPrompt } from '../utils/AIHelper.js';
 import { ScopeType, NodeMeta } from '../db/models.js';
@@ -61,7 +62,7 @@ export class LongTermMemory {
       }
       const text = lines.join('\n\n');
 
-      const personalityText = await this.getPersonalityForScope(scopeType, scopeId);
+      const personalityText = await this.getPersonalityForScope(scopeType, scopeId, sessionId);
       const systemPrompt = buildPersonaSystemPrompt(personalityText);
 
       // 叙事层 prompt
@@ -139,11 +140,39 @@ ${text}`;
     }
   }
 
-  private async getPersonalityForScope(scopeType: ScopeType, scopeId: string): Promise<string> {
+  private async getPersonalityForScope(
+    scopeType: ScopeType,
+    scopeId: string,
+    sessionId: string
+  ): Promise<string> {
+    if (scopeType === 'group') {
+      const db = DatabaseManager.getInstance(DB_PATH);
+      const group = MessageGroupManager.getInstance(db).getById(scopeId);
+      if (!group) {
+        logWarn("Personality", `group ${scopeId} 不存在`);
+        return '';
+      }
+      const p = group.personality;
+      if (p.mode === 'manual') {
+        if (p.cardId) {
+          const card = await this.personality.getCharacterCardById(p.cardId);
+          return card?.characterSetting || '';
+        }
+        if (p.customText) {
+          return p.customText;
+        }
+        return '';
+      }
+      // auto：用当前触发折叠的会话绑定的角色卡
+      const info = await this.personality.getSessionCharacterCard(sessionId);
+      return info?.characterSetting || '';
+    }
+
     if (scopeType === 'role_card') {
       const card = await this.personality.getCharacterCardById(scopeId);
       return card?.characterSetting || '';
     }
+
     return await this.personality.getPersonalityText(scopeId);
   }
 

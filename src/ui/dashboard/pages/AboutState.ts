@@ -11,12 +11,12 @@ const CURRENT_VERSION = { Main: 0, Major: 2, Minor: 1 };
 const CURRENT_VERSION_TYPE = 'Beta';
 
 const UPDATE_URLS = [
-  "https://raw.githubusercontent.com/yyswys-yjyj/com.operit.overmem/refs/heads/main/api/manifest.json",
-  "https://cdn.jsdelivr.net/gh/yyswys-yjyj/com.operit.overmem@main/api/manifest.json",
-  "https://git.repo.archive.serveryyswys.top/yyswys-yjyj/com.operit.overmem/raw/branch/main/api/manifest.json"
+  "https://raw.githubusercontent.com/serveryyswys/overmem/refs/heads/main/api/manifest.json",
+  "https://cdn.jsdelivr.net/gh/serveryyswys/overmem@main/api/manifest.json",
+  "https://git.repo.archive.serveryyswys.top/serveryyswys/overmem/raw/branch/main/api/manifest.json"
 ];
 
-const REPO_URL = "https://github.com/yyswys-yjyj/com.operit.overmem/";
+const REPO_URL = "https://github.com/serveryyswys/overmem/";
 
 export interface AboutUiState {
   versionType: string;

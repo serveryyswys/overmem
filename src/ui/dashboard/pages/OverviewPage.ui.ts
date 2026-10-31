@@ -5,10 +5,7 @@ import { OverviewUiState } from './OverviewState.js';
 import { MemoryLevel, MemoryNode } from '../../../db/models.js';
 import { BlockCard, getLevelColor, getLevelIcon, getLevelLabel } from '../components/BlockCard.ui.js';
 import { EmptyState } from '../components/EmptyState.ui.js';
-
-const LEVEL_SHORT_COLOR = '#4CAF50';
-const LEVEL_MID_COLOR   = '#FF9800';
-const LEVEL_LONG_COLOR  = '#9C27B0';
+import { LEVEL_EVENT_COLOR, LEVEL_THEME_COLOR, LEVEL_NARRATIVE_COLOR } from '../../theme/Palette.js';
 
 export interface OverviewPageEvents {
   onSelectLevel: (level: MemoryLevel | null) => void;
@@ -46,11 +43,11 @@ export function OverviewPage(
     chip('全部 (' + (state.shortCount + state.midCount + state.longCount) + ')',
       state.selectedLevel === null, cs.primary, () => events.onSelectLevel(null)),
     chip('事件 (' + state.shortCount + ')',
-      state.selectedLevel === 'short', LEVEL_SHORT_COLOR, () => events.onSelectLevel('short')),
+      state.selectedLevel === 'short', LEVEL_EVENT_COLOR, () => events.onSelectLevel('short')),
     chip('主题 (' + state.midCount + ')',
-      state.selectedLevel === 'mid', LEVEL_MID_COLOR, () => events.onSelectLevel('mid')),
+      state.selectedLevel === 'mid', LEVEL_THEME_COLOR, () => events.onSelectLevel('mid')),
     chip('叙事 (' + state.longCount + ')',
-      state.selectedLevel === 'long', LEVEL_LONG_COLOR, () => events.onSelectLevel('long'))
+      state.selectedLevel === 'long', LEVEL_NARRATIVE_COLOR, () => events.onSelectLevel('long'))
   ]));
 
   items.push(ctx.UI.Spacer({ height: 4 }));

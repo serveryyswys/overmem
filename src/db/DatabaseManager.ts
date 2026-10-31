@@ -1,11 +1,21 @@
 // db/DatabaseManager.ts
 /// <reference path="../../types/index.d.ts" />
 
+const fs = require('fs');
+const path = require('path');
+
 import {
   SessionMeta, OverMemConfig, ScopeType, BlockStats
 } from './models.js';
-import { logInfo, logError, logDebug } from '../utils/Logger.js';
+import { logInfo, logError, logDebug, logWarn } from '../utils/Logger.js';
 import { Migration } from './Migration.js';
+import {
+  DbVersion, CURRENT_DB_VERSION,
+  getUserVersion, setUserVersion, inferVersionFromSchema
+} from './DbVersion.js';
+import { runFullMigration, resetToCurrent } from './MigrationChain.js';
+import { MessageGroupManager } from './MessageGroupManager.js';
+import { setSanitizerDebugMode, sanPath, sanError } from '../utils/Sanitizer.js';
 
 const DEFAULT_CONFIG: OverMemConfig = {
   shortThreshold: 20,
@@ -36,16 +46,28 @@ const DEFAULT_CONFIG: OverMemConfig = {
   noiseTemperature: 0.3,
   synapticFailureEnabled: true,
   lastReplayAt: 0,
-  replayIntervalMs: 6 * 60 * 60 * 1000,   // 6 小时
+  replayIntervalMs: 6 * 60 * 60 * 1000,
   replayMinBatch: 5,
   replayBatchSize: 10,
 };
+
+const REQUIRED_TABLES = [
+  'config',
+  'session_meta',
+  'nodes',
+  'edges',
+  'chain_meta',
+  'injection_log',
+  'message_groups'
+];
 
 export class DatabaseManager {
   private static instance: DatabaseManager | null = null;
   private dbPath: string;
   private connection: any = null;
   private initialized: boolean = false;
+  private dbVersion: DbVersion = DbVersion.UNKNOWN;
+  private ready: boolean = false;
 
   private constructor(dbPath: string) {
     this.dbPath = dbPath;
@@ -59,14 +81,41 @@ export class DatabaseManager {
   }
 
   // ============================================
+  // 会话锁（cleanOnExit，Operit 退出时清理）
+  // ============================================
+
+  private getSessionLockFile(): string {
+    return OPERIT_CLEAN_ON_EXIT_DIR + '/.overmem.sessionlock';
+  }
+
+  private isSessionInitialized(): boolean {
+    try {
+      return fs.existsSync(this.getSessionLockFile());
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /**
+   * schema 检查成功后调用。
+   * 写入后本次 Operit 会话内后续热重载会跳过重量级检查。
+   */
+  private markSessionInitialized(): void {
+    try {
+      const file = this.getSessionLockFile();
+      const dir = path.dirname(file);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(file, String(Date.now()), 'utf8');
+    } catch (e: any) {
+    }
+  }
+
+  // ============================================
   // 生命周期
   // ============================================
 
-  /**
-   * 强制废弃旧连接。每个 hook 入口必须调用一次。
-   * 因为 Operit 在 hook 之间会回收 Java 对象，
-   * this.connection 里持有的引用可能在下次 hook 时已失效。
-   */
   public reopen(): void {
     if (this.connection) {
       try { this.connection.close(); } catch (_) {}
@@ -74,14 +123,10 @@ export class DatabaseManager {
     this.connection = null;
   }
 
-  /**
-   * 兼容旧调用，不实际关闭。
-   */
   public closeConnection(): void {
     // no-op
   }
 
-  /** 真正关闭（卸载时调用） */
   public close(): void {
     if (this.connection) {
       try { this.connection.close(); } catch (e) {}
@@ -95,13 +140,11 @@ export class DatabaseManager {
 
   public getConnection(): any {
     if (this.connection) {
-      // 探测：连接还活着就复用
       try {
         const c = this.connection.rawQuery("SELECT 1", []);
         c.close();
         return this.connection;
       } catch (_) {
-        // 已失效 → 丢弃重建
         try { this.connection.close(); } catch (_) {}
         this.connection = null;
       }
@@ -114,32 +157,295 @@ export class DatabaseManager {
       this.connection = SQLiteDatabase.openOrCreateDatabase(dbFile, null);
       return this.connection;
     } catch (error: any) {
-      logError("DB", "获取连接失败: " + error.message);
+      logError("DB", `获取连接失败：${sanError(error)}`);
       throw error;
     }
   }
 
   // ============================================
-  // 初始化
+  // 初始化（轻量检查每次做，schema 检查会话首次做）
   // ============================================
 
   public initialize(): boolean {
-    if (this.initialized) return true;
+    if (this.initialized) {
+      logDebug("DB", "已初始化，跳过");
+      return true;
+    }
 
+    const t0 = Date.now();
+    logInfo("DB", `健康检查：${sanPath(this.dbPath)}`);
+
+    // ---------- 1. 目录 ----------
     try {
-      logInfo("DB", "初始化数据库 v4...");
       this.ensureDirectory();
+    } catch (e: any) {
+      logError("DB", `创建目录失败：${sanError(e)}`);
+      return false;
+    }
 
-      const conn = this.getConnection();
-      Migration.run(conn);
+    // ---------- 2. 文件存在性 ----------
+    const fileExists = this.dbFileExists();
+    if (!fileExists) logWarn("DB", "数据库文件不存在，将新建");
 
-      this.initDefaultConfig();
+    // ---------- 3. 打开连接（失败则备份重建） ----------
+    let conn: any = null;
+    try {
+      conn = this.getConnection();
+    } catch (e: any) {
+      logError("DB", `打开连接失败：${sanError(e)}`);
+      if (!fileExists) {
+        this.ready = false;
+        this.dbVersion = DbVersion.UNKNOWN;
+        this.initialized = true;
+        return false;
+      }
+      logWarn("DB", "文件存在但无法打开，备份后重建");
+      if (!this.backupCorruptedFile()) {
+        logError("DB", "备份失败，放弃重建");
+        this.ready = false;
+        this.dbVersion = DbVersion.UNKNOWN;
+        this.initialized = true;
+        return false;
+      }
+      try {
+        this.connection = null;
+        conn = this.getConnection();
+        logInfo("DB", "已重建空数据库");
+      } catch (e2: any) {
+        logError("DB", `重建失败：${sanError(e2)}`);
+        this.ready = false;
+        this.dbVersion = DbVersion.UNKNOWN;
+        this.initialized = true;
+        return false;
+      }
+    }
+
+    // ---------- 4. 读 user_version + 缺表情况 ----------
+    const userVer = getUserVersion(conn);
+    const missing = this.checkRequiredTables(conn);
+    logInfo("DB",
+      `user_version=${userVer}，缺失表 ${missing.length}/${REQUIRED_TABLES.length}`);
+
+    // ============================================
+    // 分支 A：全新安装（user_version=0 + 一个表都没有）
+    // ============================================
+    if (userVer === 0 && missing.length === REQUIRED_TABLES.length) {
+      logInfo("DB", "全新安装，建 schema 并写入 user_version");
+      try {
+        Migration.ensureSchema(conn);
+        setUserVersion(conn, CURRENT_DB_VERSION);
+        this.initDefaultConfig();
+      } catch (e: any) {
+        logError("DB", `全新安装失败：${sanError(e)}`);
+        this.ready = false;
+        this.dbVersion = DbVersion.UNKNOWN;
+        this.initialized = true;
+        return false;
+      }
+
+      this.markSessionInitialized();
+      this.dbVersion = CURRENT_DB_VERSION;
+      this.ready = true;
+
+      try {
+        const cfg = this.getConfig();
+        setSanitizerDebugMode(cfg.debugMode === true);
+      } catch (_) {
+        setSanitizerDebugMode(false);
+      }
 
       this.initialized = true;
-      logInfo("DB", "数据库 v4 初始化完成");
+      logInfo("DB",
+        `健康检查完成：全新库 v${CURRENT_DB_VERSION}，就绪，耗时 ${Date.now() - t0}ms`);
       return true;
-    } catch (err: any) {
-      logError("DB", "初始化失败: " + err.message);
+    }
+
+    // ============================================
+    // 分支 B：历史遗留（user_version=0 但有部分表）
+    // 推断一次 → 回写 → 下次不再推断
+    // ============================================
+    if (userVer === 0 && missing.length < REQUIRED_TABLES.length) {
+      logWarn("DB", "user_version=0 但有表，按表结构推断版本");
+      try {
+        // 1. 先在补建表之前推断版本（基于现有表）
+        const inferred = inferVersionFromSchema(conn);
+        logInfo("DB", `推断为 v${inferred}（补建前）`);
+
+        // 2. 补建缺失表（不动 user_version）
+        Migration.ensureSchema(conn);
+
+        // 3. 写回推断版本（不是补建后的）
+        setUserVersion(conn, inferred);
+        this.dbVersion = inferred;
+        this.ready = (inferred === CURRENT_DB_VERSION);
+
+        if (inferred !== DbVersion.V3) {
+          this.initDefaultConfig();
+        }
+
+        try {
+          const cfg = this.getConfig();
+          setSanitizerDebugMode(cfg.debugMode === true);
+        } catch (_) {
+          setSanitizerDebugMode(false);
+        }
+
+        this.markSessionInitialized();
+        logInfo("DB",
+          `健康检查完成：推断为 v${inferred}，已回写 user_version，耗时 ${Date.now() - t0}ms`);
+      } catch (e: any) {
+        logError("DB", `历史遗留库处理失败：${sanError(e)}`);
+        this.ready = false;
+        this.dbVersion = DbVersion.UNKNOWN;
+      }
+      this.initialized = true;
+      return true;
+    }
+
+    // ============================================
+    // 分支 C：正常版本（user_version ∈ {3,4,5}）
+    // ============================================
+    this.dbVersion = userVer as DbVersion;
+    logInfo("DB", `检测版本 v${userVer}`);
+
+    // C-1：v3 不碰数据
+    if (userVer === DbVersion.V3) {
+      this.ready = false;
+      this.initialized = true;
+      try {
+        const cfg = this.getConfig();
+        setSanitizerDebugMode(cfg.debugMode === true);
+      } catch (_) {
+        setSanitizerDebugMode(false);
+      }
+      logInfo("DB",
+        `健康检查完成：v3，待迁移，耗时 ${Date.now() - t0}ms`);
+      return true;
+    }
+
+    // C-2：v4 / v5 —— 需要时补 schema，但绝不写 user_version
+    const sessionInitialized = this.isSessionInitialized();
+    const needSchemaCheck = !sessionInitialized || missing.length > 0;
+
+    if (needSchemaCheck) {
+      logInfo("DB", "补建 schema（不动 user_version）");
+      try {
+        Migration.ensureSchema(conn);
+      } catch (e: any) {
+        logError("DB", `schema 修复失败：${sanError(e)}`);
+        this.ready = false;
+        this.initialized = true;
+        return false;
+      }
+      if (!sessionInitialized) this.markSessionInitialized();
+    } else {
+      logDebug("DB", "本次会话已检查过 schema，跳过");
+    }
+
+    this.initDefaultConfig();
+
+    try {
+      const cfg = this.getConfig();
+      setSanitizerDebugMode(cfg.debugMode === true);
+    } catch (_) {
+      setSanitizerDebugMode(false);
+    }
+
+    this.ready = (userVer === CURRENT_DB_VERSION);
+    this.initialized = true;
+    logInfo("DB",
+      `健康检查完成：v${userVer}，状态：${this.ready ? '就绪' : '待迁移'}，` +
+      `耗时 ${Date.now() - t0}ms`);
+    return true;
+  }
+
+  // ============================================
+  // 自愈辅助
+  // ============================================
+
+  private dbFileExists(): boolean {
+    try {
+      const File = Java.type("java.io.File");
+      return new File(this.dbPath).exists();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  private checkRequiredTables(conn: any): string[] {
+    const missing: string[] = [];
+    try {
+      const c = conn.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table'", []
+      );
+      const existing = new Set<string>();
+      while (c.moveToNext()) existing.add(c.getString(0));
+      c.close();
+      for (const t of REQUIRED_TABLES) {
+        if (!existing.has(t)) missing.push(t);
+      }
+    } catch (e: any) {
+      logError("DB", `查询表列表失败：${sanError(e)}`);
+    }
+    return missing;
+  }
+
+  private backupCorruptedFile(): boolean {
+    try {
+      const File = Java.type("java.io.File");
+      const src = new File(this.dbPath);
+      if (!src.exists()) return false;
+
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const backup = new File(this.dbPath + '.corrupted.' + stamp);
+      const ok = src.renameTo(backup);
+      if (ok) {
+        logWarn("DB", `损坏文件已备份：${sanPath(backup.getAbsolutePath())}`);
+      }
+      return ok;
+    } catch (e: any) {
+      logError("DB", `备份损坏文件失败：${sanError(e)}`);
+      return false;
+    }
+  }
+
+  public isReady(): boolean { return this.ready; }
+  public getDbVersion(): DbVersion { return this.dbVersion; }
+
+  /** @deprecated 用 getDbVersion() === DbVersion.V3 替代 */
+  public checkLegacyV3(): boolean {
+    return this.dbVersion === DbVersion.V3;
+  }
+
+  public markReady(): void {
+    this.ready = true;
+    this.dbVersion = CURRENT_DB_VERSION;
+  }
+
+  public runMigration(): void {
+    const conn = this.getConnection();
+    logInfo("DB", `触发迁移，当前 v${this.dbVersion}`);
+    runFullMigration(conn, this.dbVersion);
+    this.markReady();
+    logInfo("DB", `迁移完成，当前 v${CURRENT_DB_VERSION}`);
+  }
+
+  public resetDatabase(): void {
+    const conn = this.getConnection();
+    logInfo("DB", "触发重置");
+    resetToCurrent(conn);
+    this.initDefaultConfig();
+    this.markReady();
+    logInfo("DB", `重置完成，当前 v${CURRENT_DB_VERSION}`);
+  }
+
+  /** @deprecated 用 resetDatabase() 替代，仅为 LegacyWarningState 保留 */
+  public forceMigrateToV4(): boolean {
+    try {
+      this.resetDatabase();
+      return true;
+    } catch (e: any) {
+      logError("DB", `forceMigrateToV4 失败：${sanError(e)}`);
       return false;
     }
   }
@@ -168,36 +474,7 @@ export class DatabaseManager {
         logInfo("DB", "写入默认配置");
       }
     } catch (error: any) {
-      logError("DB", "初始化配置失败: " + error.message);
-    }
-  }
-
-  // ============================================
-  // 旧版检测 + 强制迁移
-  // ============================================
-
-  public checkLegacyV3(): boolean {
-    try {
-      const conn = this.getConnection();
-      return Migration.isLegacyV3Database(conn);
-    } catch (e: any) {
-      logError("DB", "checkLegacyV3 失败: " + e.message);
-      return false;
-    }
-  }
-
-  public forceMigrateToV4(): boolean {
-    try {
-      const conn = this.getConnection();
-      const ok = Migration.forceMigrateToV4(conn);
-      if (ok) {
-        this.initDefaultConfig();
-        this.initialized = true;
-      }
-      return ok;
-    } catch (e: any) {
-      logError("DB", "forceMigrateToV4 失败: " + e.message);
-      return false;
+      logError("DB", `初始化配置失败：${sanError(error)}`);
     }
   }
 
@@ -217,7 +494,7 @@ export class DatabaseManager {
       cursor.close();
       return { ...DEFAULT_CONFIG };
     } catch (error: any) {
-      logError("DB", "读取配置失败: " + error.message);
+      logError("DB", `读取配置失败：${sanError(error)}`);
       return { ...DEFAULT_CONFIG };
     }
   }
@@ -230,21 +507,30 @@ export class DatabaseManager {
         "INSERT OR REPLACE INTO config (key, value, updated_at) VALUES (?, ?, ?)",
         ['overmem_config', JSON.stringify(config), now]
       );
+      setSanitizerDebugMode(config.debugMode === true);
       return true;
     } catch (error: any) {
-      logError("DB", "保存配置失败: " + error.message);
+      logError("DB", `保存配置失败：${sanError(error)}`);
       return false;
     }
   }
 
   // ============================================
-  // 作用域
+  // 作用域（消息组策略）
   // ============================================
 
   public getScope(sessionId: string, roleCardId: string): { type: ScopeType; id: string } {
-    const config = this.getConfig();
-    if (config.globalPassthrough) return { type: 'global', id: 'global' };
-    if (config.sessionPassthrough && roleCardId) return { type: 'role_card', id: roleCardId };
+    if (!this.ready) {
+      logDebug("Scope", "未就绪，降级为 session");
+      return { type: 'session', id: sessionId };
+    }
+
+    const group = MessageGroupManager.getInstance(this).resolve(sessionId, roleCardId);
+    if (group) {
+      logDebug("Scope", `命中 ${group.groupId}`);
+      return { type: 'group', id: group.groupId };
+    }
+    logDebug("Scope", "未命中，降级为 session");
     return { type: 'session', id: sessionId };
   }
 
@@ -307,7 +593,7 @@ export class DatabaseManager {
         [meta.title, meta.roleCardId, meta.roleCardName, meta.lastMessageAt || now, now, meta.sessionId]
       );
     } catch (e: any) {
-      logError("DB", "updateSessionMeta 失败: " + e.message);
+      logError("DB", `updateSessionMeta 失败：${sanError(e)}`);
     }
   }
 
@@ -383,7 +669,7 @@ export class DatabaseManager {
       );
       return true;
     } catch (e: any) {
-      logError("DB", "logInjection 失败: " + e.message);
+      logError("DB", `logInjection 失败：${sanError(e)}`);
       return false;
     }
   }

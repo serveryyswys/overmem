@@ -2,6 +2,8 @@
 /// <reference path="../../../../types/index.d.ts" />
 
 import { SectionHeader } from '../components/SectionHeader.ui.js';
+import { LICENSE_APACHE_COLOR, LICENSE_GPL_COLOR, LICENSE_MIT_COLOR } from '../../theme/Palette.js';
+import { logInfo } from '../../../utils/Logger.js';
 
 interface LibInfo {
   name: string;
@@ -50,9 +52,9 @@ export function OpenSourcePage(
     name: 'OverMem 记忆库',
     author: 'Copyright (C) 2026 yyswys-yjyj',
     license: 'GPL-3.0',
-    licenseColor: '#0B9FF0',
+    licenseColor: LICENSE_GPL_COLOR,
     usage: '本项目自身，为 Operit AI 提供智能对话记忆管理能力。',
-    url: 'https://github.com/yyswys-yjyj/com.operit.overmem/'
+    url: 'https://github.com/serveryyswys/overmem/'
   }));
 
   items.push(SectionHeader(ctx, { icon: 'smart_toy', title: '宿主平台', color: '#FF6640' }));
@@ -70,7 +72,7 @@ export function OpenSourcePage(
     name: 'OkHttp',
     author: 'Copyright Square, Inc.（现由 Commonhaus Foundation / lysine.dev 托管）',
     license: 'Apache-2.0',
-    licenseColor: '#2196F3',
+    licenseColor: LICENSE_APACHE_COLOR,
     usage: 'HTTP 客户端。用于调用 AI 供应商接口、检查更新。',
     url: 'https://lysine.dev/okhttp/'
   }));
@@ -78,7 +80,7 @@ export function OpenSourcePage(
     name: 'Android SQLite',
     author: 'Copyright The Android Open Source Project',
     license: 'Apache-2.0',
-    licenseColor: '#2196F3',
+    licenseColor: LICENSE_APACHE_COLOR,
     usage: '本地数据库引擎。用于 OverMem 记忆库持久化。',
     url: 'https://developer.android.com/reference/android/database/sqlite/package-summary'
   }));
@@ -86,7 +88,7 @@ export function OpenSourcePage(
     name: 'segmentit',
     author: 'Copyright Lei Zongmin, Linonetwo',
     license: 'MIT',
-    licenseColor: '#4CAF50',
+    licenseColor: LICENSE_MIT_COLOR,
     usage: '中文分词库。用于从用户输入提取关键词，作为内容种子驱动联想召回。',
     url: 'https://github.com/linonetwo/segmentit'
   }));
@@ -94,7 +96,7 @@ export function OpenSourcePage(
     name: 'TypeScript',
     author: 'Copyright Microsoft Corporation',
     license: 'Apache-2.0',
-    licenseColor: '#2196F3',
+    licenseColor: LICENSE_APACHE_COLOR,
     usage: '开发语言与编译器。OverMem 源码使用 TypeScript 编写，编译为 JavaScript 后运行。',
     url: 'https://github.com/microsoft/TypeScript'
   }));
@@ -109,7 +111,7 @@ export function OpenSourcePage(
     name: 'AndroidX Compose Material3 / Material Icons',
     author: 'Copyright Google LLC / The Android Open Source Project',
     license: 'Apache-2.0',
-    licenseColor: '#2196F3',
+    licenseColor: LICENSE_APACHE_COLOR,
     usage: 'Compose DSL 底层 UI 组件与图标（Card、Button、TextField、Icon 等）。',
     url: 'https://developer.android.com/jetpack/compose'
   }));
@@ -117,7 +119,7 @@ export function OpenSourcePage(
     name: 'QuickJS',
     author: 'Copyright Fabrice Bellard and Charlie Gordon',
     license: 'MIT',
-    licenseColor: '#4CAF50',
+    licenseColor: LICENSE_MIT_COLOR,
     usage: 'Operit 内部 JavaScript 运行时。OverMem 编译后的 JS 代码在其上执行。',
     url: 'https://quickjs.org/'
   }));
@@ -159,11 +161,11 @@ export function OpenSourcePage(
   }, [
     ctx.UI.Column({ padding: 14 }, [
       ctx.UI.Row({ verticalAlignment: 'center' }, [
-        ctx.UI.Icon({ name: 'warning', size: 16, tint: '#FF9800' }),
+        ctx.UI.Icon({ name: 'warning', size: 16, tint: cs.tertiary }),
         ctx.UI.Spacer({ width: 6 }),
         ctx.UI.Text({
           text: '无担保声明', fontSize: 13,
-          fontWeight: 'bold', color: '#FF9800'
+          fontWeight: 'bold', color: cs.tertiary
         })
       ]),
       ctx.UI.Spacer({ height: 6 }),
@@ -179,6 +181,8 @@ export function OpenSourcePage(
     fontSize: 11, color: cs.onSurfaceVariant,
     modifier: ctx.Modifier.padding({ top: 4, bottom: 24 })
   }));
+
+  logInfo("UI", "渲染 OpenSourcePage");
 
   return ctx.UI.LazyColumn({ fillMaxSize: true, padding: 16 }, items);
 }

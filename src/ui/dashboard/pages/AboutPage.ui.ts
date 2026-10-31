@@ -2,14 +2,15 @@
 /// <reference path="../../../../types/index.d.ts" />
 
 import { AboutUiState } from './AboutState.js';
+import { VERSION_ALPHA_COLOR, VERSION_BETA_COLOR, VERSION_RC_COLOR, VERSION_RELEASE_COLOR, VERSION_DEFAULT_COLOR } from '../../theme/Palette.js';
 
-function getVersionTypeColor(type: string): any {
+function getVersionTypeColor(type: string): string {
   switch (type) {
-    case 'Alpha': return '#FF6640';
-    case 'Beta': return '#D400FF';
-    case 'RC': return '#0E0470';
-    case 'Release': return '#0B9FF0';
-    default: return '#666666';
+    case 'Alpha': return VERSION_ALPHA_COLOR;
+    case 'Beta': return VERSION_BETA_COLOR;
+    case 'RC': return VERSION_RC_COLOR;
+    case 'Release': return VERSION_RELEASE_COLOR;
+    default: return VERSION_DEFAULT_COLOR;
   }
 }
 

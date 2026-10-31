@@ -2,6 +2,8 @@
 /// <reference path="../../../types/index.d.ts" />
 
 import { NavController, NavEntry } from './Navigation.js';
+import { logInfo, logError } from '../../utils/Logger.js';
+import { sanContent } from '../../utils/Sanitizer.js';
 
 export interface BannerState {
   visible: boolean;
@@ -33,6 +35,7 @@ export class DashboardState {
     }
     this.banner = { visible: true, message, type };
     this.notify();
+    logInfo("UI", `Banner [${type}]: ${message}`);
     this.bannerTimer = setTimeout(() => {
       this.banner = { visible: false, message: '', type: 'info' };
       this.bannerTimer = null;
@@ -53,12 +56,17 @@ export class DashboardState {
     this.lastError = msg;
     this.isHealthy = false;
     this.notify();
+    logError("UI", `状态异常: ${sanContent(msg)}`);
   }
 
   markHealthy(): void {
+    const wasUnhealthy = !this.isHealthy || this.lastError !== '';
     this.lastError = '';
     this.isHealthy = true;
     this.notify();
+    if (wasUnhealthy) {
+      logInfo("UI", "状态恢复");
+    }
   }
 
   onChange(listener: () => void): () => void {

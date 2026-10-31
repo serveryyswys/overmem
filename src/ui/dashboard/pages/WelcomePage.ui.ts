@@ -4,11 +4,7 @@
 import { WelcomeUiState } from './WelcomeState.js';
 import { StatCard } from '../components/StatCard.ui.js';
 import { IconTextButton } from '../components/Common.ui.js';
-
-const LEVEL_SHORT_COLOR = '#4CAF50';
-const LEVEL_MID_COLOR   = '#FF9800';
-const LEVEL_LONG_COLOR  = '#9C27B0';
-const STATE_ACTIVE_COLOR = '#F44336';
+import { LEVEL_EVENT_COLOR, LEVEL_THEME_COLOR, LEVEL_NARRATIVE_COLOR, STATE_ACTIVE_COLOR } from '../../theme/Palette.js';
 
 function formatCount(num: number): string {
   const n = Number(num);
@@ -64,12 +60,12 @@ export function WelcomePage(
   items.push(ctx.UI.Spacer({ height: 8 }));
 
   items.push(renderStatRow(ctx,
-    '事件', formatCount(state.shortCount), LEVEL_SHORT_COLOR, 'bolt',
-    '主题', formatCount(state.midCount), LEVEL_MID_COLOR, 'book'
+    '事件', formatCount(state.shortCount), LEVEL_EVENT_COLOR, 'bolt',
+    '主题', formatCount(state.midCount), LEVEL_THEME_COLOR, 'book'
   ));
   items.push(ctx.UI.Spacer({ height: 6 }));
   items.push(renderStatRow(ctx,
-    '叙事', formatCount(state.longCount), LEVEL_LONG_COLOR, 'archive',
+    '叙事', formatCount(state.longCount), LEVEL_NARRATIVE_COLOR, 'archive',
     '会话', formatCount(state.sessionCount), cs.primary, 'chat'
   ));
   items.push(ctx.UI.Spacer({ height: 6 }));

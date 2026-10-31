@@ -3,8 +3,11 @@
 
 import { isSetupComplete, loadSettings } from '../../utils/ConfigManager.js';
 import { DatabaseManager } from '../../db/DatabaseManager.js';
+import { DbVersion, CURRENT_DB_VERSION } from '../../db/DbVersion.js';
 import { DashboardState } from './DashboardState.js';
 import { NavEntry } from './Navigation.js';
+import { logInfo, logDebug, logError } from '../../utils/Logger.js';
+import { sanContent, sanError } from '../../utils/Sanitizer.js';
 
 import { WelcomeStateHolder } from './pages/WelcomeState.js';
 import { ConfigStateHolder } from './pages/ConfigState.js';
@@ -18,6 +21,7 @@ import { ConfirmStateHolder, ConfirmPageData } from './pages/ConfirmState.js';
 import { AboutStateHolder } from './pages/AboutState.js';
 import { AddonsStateHolder } from './pages/AddonsState.js';
 import { LegacyWarningStateHolder } from './pages/LegacyWarningState.js';
+import { MessageGroupsStateHolder } from './pages/MessageGroupsState.js';
 
 import { ConfigPage } from './pages/ConfigPage.ui.js';
 import { HomePage } from './pages/HomePage.ui.js';
@@ -29,6 +33,8 @@ import { AboutPage } from './pages/AboutPage.ui.js';
 import { OpenSourcePage } from './pages/OpenSourcePage.ui.js';
 import { AddonsPage } from './pages/AddonsPage.ui.js';
 import { LegacyWarningPage } from './pages/LegacyWarningPage.ui.js';
+import { MessageGroupsPage } from './pages/MessageGroupsPage.ui.js';
+import { MessageGroupEditPage } from './pages/MessageGroupEditPage.ui.js';
 import { Banner } from './components/Banner.ui.js';
 
 const DB_PATH = "/storage/emulated/0/Download/Operit/overmem/mem.db";
@@ -37,23 +43,34 @@ export default function DashboardScreen(ctx: any): any {
   const cs = ctx.MaterialTheme.colorScheme;
 
   const dashboard = ctx.useMemo('dash_state', () => {
-    let isLegacy = false;
     try {
       const db = DatabaseManager.getInstance(DB_PATH);
-      isLegacy = db.checkLegacyV3();
-    } catch (e: any) {
-    }
+      db.initialize();
+      const version = db.getDbVersion();
+      const ready = db.isReady();
+      logInfo("UI", `Dashboard 初始化：dbVersion=v${version}, ready=${ready}`);
 
-    let initialPage: NavEntry;
-    if (isLegacy) {
-      initialPage = { page: 'legacy_warning', data: null };
-    } else {
-      const complete = isSetupComplete();
-      const settings = loadSettings();
-      const valid = complete && settings !== null;
-      initialPage = { page: valid ? 'home' : 'config', data: null };
+      let initialPage: NavEntry;
+
+      if (version !== CURRENT_DB_VERSION) {
+        // v3 / v4 / UNKNOWN：都需要迁移
+        initialPage = { page: 'legacy_warning', data: null };
+        logInfo("UI", `Dashboard 初始页: legacy_warning (v${version} 待迁移)`);
+      } else {
+        const complete = isSetupComplete();
+        const settings = loadSettings();
+        const valid = complete && settings !== null;
+        logInfo("UI",
+          `配置检查: setupComplete=${complete}, settingsLoaded=${settings !== null}, valid=${valid}`);
+        initialPage = { page: valid ? 'home' : 'config', data: null };
+        logInfo("UI", `Dashboard 初始页: ${initialPage.page}`);
+      }
+
+      return new DashboardState(initialPage);
+    } catch (e: any) {
+      logError("UI", `Dashboard 初始化失败: ${sanError(e)}`);
+      return new DashboardState({ page: 'config', data: null });
     }
-    return new DashboardState(initialPage);
   }, []);
 
   const welcomeH = ctx.useMemo('welcome_h', () => new WelcomeStateHolder(dashboard, DB_PATH), []);
@@ -68,19 +85,23 @@ export default function DashboardScreen(ctx: any): any {
   const aboutH = ctx.useMemo('about_h', () => new AboutStateHolder(dashboard), []);
   const addonsH = ctx.useMemo('addons_h', () => new AddonsStateHolder(dashboard), []);
   const legacyWarningH = ctx.useMemo('legacy_warning_h', () => new LegacyWarningStateHolder(dashboard), []);
+  const messageGroupsH = ctx.useMemo('message_groups_h',
+    () => new MessageGroupsStateHolder(dashboard, DB_PATH), []);
 
   const [tick, setTick] = ctx.useState('dashboard_tick', 0);
 
   ctx.useMemo('dash_subscribe', () => {
     const off1 = dashboard.onChange(() => setTick((t: number) => t + 1));
 
-    // nav 变化：不仅重渲染，还要按当前页面触发对应 Holder 的数据加载
     const off2 = dashboard.nav.onChange(() => {
       setTick((t: number) => t + 1);
 
       const entry = dashboard.nav.current();
+      logInfo("UI",
+        `导航: ${entry.page}` +
+        (entry.data ? `, data=${sanContent(JSON.stringify(entry.data))}` : ''));
+
       if (entry.page === 'home') {
-        // 每次切到 home 都刷新，保证迁移后、切换 tab 后数据都是最新的
         welcomeH.refresh();
         overviewH.refresh();
       } else if (entry.page === 'config') {
@@ -91,10 +112,11 @@ export default function DashboardScreen(ctx: any): any {
         aboutH.refresh();
       } else if (entry.page === 'addons') {
         addonsH.refresh();
+      } else if (entry.page === 'message_groups') {
+        messageGroupsH.load();
       }
     });
 
-    // 初始 mount 时也跑一次
     const entry = dashboard.nav.current();
     if (entry.page === 'home') {
       welcomeH.refresh();
@@ -110,7 +132,7 @@ export default function DashboardScreen(ctx: any): any {
   const content = renderRoute(ctx, entry, {
     dashboard, welcomeH, configH, overviewH, sessionsH, settingsH,
     sessionBlocksH, detailH, editH, confirmH, aboutH, addonsH,
-    legacyWarningH
+    legacyWarningH, messageGroupsH
   });
 
   const banner = dashboard.getBanner();
@@ -138,6 +160,7 @@ interface Holders {
   aboutH: AboutStateHolder;
   addonsH: AddonsStateHolder;
   legacyWarningH: LegacyWarningStateHolder;
+  messageGroupsH: MessageGroupsStateHolder;
 }
 
 function renderRoute(ctx: any, entry: NavEntry, h: Holders): any {
@@ -149,6 +172,85 @@ function renderRoute(ctx: any, entry: NavEntry, h: Holders): any {
         onMigrate: () => h.legacyWarningH.migrateData(),
         onForceMigrate: () => h.legacyWarningH.forceMigrate()
       });
+
+    case 'message_groups':
+      return MessageGroupsPage(ctx, h.messageGroupsH.get(), {
+        onBack: () => h.dashboard.nav.pop(),
+        onRefresh: () => h.messageGroupsH.load(),
+        onCreate: () => {
+          h.messageGroupsH.clearEdit();
+          h.messageGroupsH.bindEdit(null);
+          h.dashboard.nav.navigate('message_group_edit', { groupId: null });
+        },
+        onEdit: (groupId) => {
+          h.messageGroupsH.clearEdit();
+          h.messageGroupsH.bindEdit(groupId);
+          h.dashboard.nav.navigate('message_group_edit', { groupId });
+        },
+        onDelete: (group) => {
+          const data: ConfirmPageData = {
+            title: '删除消息组',
+            message: `确定删除「${group.name || group.groupId}」吗？此操作不可恢复。`,
+            confirmText: '删除',
+            cancelText: '取消',
+            onConfirm: async () => {
+              h.messageGroupsH.deleteGroup(group.groupId, () => {
+                h.dashboard.nav.pop();
+              });
+            }
+          };
+          h.confirmH.bind(data);
+          h.dashboard.nav.navigate('confirm');
+        },
+        onToggleEnabled: (groupId) => h.messageGroupsH.toggleEnabled(groupId),
+        onMoveUp: (index) => h.messageGroupsH.moveUp(index),
+        onMoveDown: (index) => h.messageGroupsH.moveDown(index)
+      });
+
+    case 'message_group_edit': {
+      // bindEdit 是同步方法，调用后 editState 立即就绪，同一次渲染即可出画面
+      if (!h.messageGroupsH.getEdit()) {
+        h.messageGroupsH.bindEdit(entry.data?.groupId ?? null);
+      }
+      const editState = h.messageGroupsH.getEdit();
+      if (!editState) {
+        return ctx.UI.Box({ fillMaxSize: true, contentAlignment: 'center' }, [
+          ctx.UI.Text({ text: '加载编辑页失败' })
+        ]);
+      }
+      const draft = editState.draft;
+      return MessageGroupEditPage(ctx, editState, {
+        onBack: () => {
+          h.messageGroupsH.clearEdit();
+          h.dashboard.nav.pop();
+        },
+        onPatch: (p) => h.messageGroupsH.patchEdit(p),
+        onPatchInclusions: (p) => h.messageGroupsH.patchInclusions(p),
+        onPatchExclusions: (p) => h.messageGroupsH.patchExclusions(p),
+        onPatchPersonality: (p) => h.messageGroupsH.patchPersonality(p),
+        onSessionSearchChange: (v) => h.messageGroupsH.patchSessionSearch(v),
+        onSave: () => {
+          h.messageGroupsH.saveEdit(() => {
+            h.dashboard.nav.pop();
+          });
+        },
+        onDelete: () => {
+          const data: ConfirmPageData = {
+            title: '删除消息组',
+            message: `确定删除「${draft.name || draft.groupId}」吗？此操作不可恢复。`,
+            confirmText: '删除',
+            cancelText: '取消',
+            onConfirm: async () => {
+              h.messageGroupsH.deleteGroup(draft.groupId, () => {
+                h.dashboard.nav.pop(2);
+              });
+            }
+          };
+          h.confirmH.bind(data);
+          h.dashboard.nav.navigate('confirm');
+        }
+      });
+    }
 
     case 'config':
       return ConfigPage(ctx, h.configH.get(), {
@@ -185,6 +287,13 @@ function renderRoute(ctx: any, entry: NavEntry, h: Holders): any {
           onRefreshSessions: () => h.sessionsH.refresh(),
           onOpenSession: (sessionId, title) => h.dashboard.nav.navigate('session_blocks', { sessionId, title }),
           onRefreshAddons: () => h.addonsH.refresh(),
+          addons: {
+            onBack: () => {},
+            onSelectMode: (m) => h.addonsH.selectMode(m),
+            onStartDeploy: () => h.addonsH.startDeploy(),
+            onRemoteUrlChange: (v) => h.addonsH.setRemoteUrl(v),
+            onConnectRemote: () => h.addonsH.connectRemote()
+          },
           settings: {
             onPatch: (p) => h.settingsH.patchSetting(p),
             onSave: () => h.settingsH.save(),
@@ -193,9 +302,8 @@ function renderRoute(ctx: any, entry: NavEntry, h: Holders): any {
             onRefreshLogSize: () => h.settingsH.refreshLogSize(),
             onDeleteLog: () => h.settingsH.deleteLog(),
             onResetAiConfig: () => h.settingsH.openConfigPage(),
-            onLoadCards: () => h.settingsH.loadCards(),
-            onClearCards: () => h.settingsH.clearCards(),
-            onSelectCard: (id, name) => h.settingsH.selectCard(id, name),
+            onOpenMessageGroups: () => h.settingsH.manageMessageGroups(),
+            onRefreshMessageGroups: () => h.settingsH.refreshMessageGroups(),
             onInstallClient: () => h.settingsH.installClient(),
             onRefreshClientStatus: () => h.settingsH.refreshClientStatus(),
             onOpenAddons: () => h.dashboard.nav.navigate('addons'),
@@ -256,7 +364,6 @@ function renderRoute(ctx: any, entry: NavEntry, h: Holders): any {
     }
 
     case 'about': {
-      h.aboutH.refresh();
       return AboutPage(ctx, h.aboutH.get(), {
         onBack: () => h.dashboard.nav.pop(),
         onCheckUpdate: () => h.aboutH.checkUpdate(),
@@ -273,13 +380,17 @@ function renderRoute(ctx: any, entry: NavEntry, h: Holders): any {
       });
 
     case 'addons': {
-      h.addonsH.refresh();
       return AddonsPage(ctx, h.addonsH.get(), {
-        onBack: () => h.dashboard.nav.pop()
+        onBack: () => h.dashboard.nav.pop(),
+        onSelectMode: (m) => h.addonsH.selectMode(m),
+        onStartDeploy: () => h.addonsH.startDeploy(),
+        onRemoteUrlChange: (v) => h.addonsH.setRemoteUrl(v),
+        onConnectRemote: () => h.addonsH.connectRemote()
       });
     }
 
     default:
+      logDebug("UI", `未知页面: ${entry.page}`);
       return ctx.UI.Text({ text: '未知页面' });
   }
 }

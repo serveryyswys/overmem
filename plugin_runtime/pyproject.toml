@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "overmem-runtime"
+version = "0.1.0"
+description = "OverMem plugin runtime (FastAPI)"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "pyyaml>=6.0",
+    "bcrypt>=4.0",
+    "pyjwt>=2.8",
+    "pydantic>=2.0",
+    "python-multipart>=0.0.9",
+]
+
+[project.scripts]
+overmem-runtime = "overmem_runtime.__main__:main"
+
+[tool.setuptools]
+packages = [
+    "overmem_runtime",
+    "overmem_runtime.api",
+    "overmem_runtime.plugins",
+]
+
+[tool.setuptools.package-data]
+overmem_runtime = ["static/*"]

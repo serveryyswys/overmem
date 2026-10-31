@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OverMem 插件运行时</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">OM</span>
+      <div>
+        <h1>OverMem 插件运行时</h1>
+        <p class="sub" id="subtitle">加载中…</p>
+      </div>
+    </div>
+    <div class="status" id="status-dot"><span class="dot"></span><span id="status-text">未连接</span></div>
+  </header>
+
+  <section class="authbar" id="authbar" hidden>
+    <input id="token-input" type="password" placeholder="粘贴 API Key 或 JWT" />
+    <button id="token-save">获取/保存 Token</button>
+    <span id="token-state" class="muted"></span>
+  </section>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="overview">概览</button>
+    <button class="tab" data-tab="plugins">插件</button>
+    <button class="tab" data-tab="keys" hidden>API Key</button>
+    <button class="tab" data-tab="logs">日志</button>
+  </nav>
+
+  <main>
+    <section id="tab-overview" class="panel">
+      <div class="cards" id="overview-cards"></div>
+      <h2>最近日志</h2>
+      <div class="logbox" id="overview-logs"></div>
+    </section>
+
+    <section id="tab-plugins" class="panel" hidden>
+      <div class="row spread">
+        <h2>已安装插件</h2>
+        <div class="row">
+          <label class="upload">上传 zip<input id="zip-input" type="file" accept=".zip" hidden /></label>
+          <button id="refresh-plugins">刷新</button>
+        </div>
+      </div>
+      <table class="table" id="plugins-table">
+        <thead><tr><th>ID</th><th>名称</th><th>版本</th><th>状态</th><th>能力</th><th>操作</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <h2>配置编辑</h2>
+      <div class="row">
+        <select id="config-plugin"></select>
+        <button id="load-config">读取配置</button>
+      </div>
+      <div id="config-form" class="configform muted">选择一个插件后读取配置</div>
+    </section>
+
+    <section id="tab-keys" class="panel" hidden>
+      <h2>API Key</h2>
+      <div class="row">
+        <input id="key-label" placeholder="备注（可选）" />
+        <input id="key-scopes" placeholder="scopes，逗号分隔，留空=默认" size="34" />
+        <button id="key-create">创建</button>
+      </div>
+      <p class="muted">明文只在创建时返回一次；丢失请吊销后重建。</p>
+      <table class="table" id="keys-table">
+        <thead><tr><th>ID</th><th>备注</th><th>Scopes</th><th>创建</th><th>最近使用</th><th>操作</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div id="key-output" class="keyout" hidden></div>
+    </section>
+
+    <section id="tab-logs" class="panel" hidden>
+      <div class="row spread">
+        <h2>日志</h2>
+        <div class="row">
+          <select id="log-filter"><option value="">全部插件</option></select>
+          <button id="refresh-logs">刷新</button>
+        </div>
+      </div>
+      <div class="logbox" id="logbox"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="./app.js"></script>
+</body>
+</html>

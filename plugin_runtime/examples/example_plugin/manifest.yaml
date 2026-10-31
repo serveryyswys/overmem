@@ -1,0 +1,21 @@
+id: com.example.example_plugin
+name: 示例插件
+version: 0.1.0
+description: OverMem 插件运行时示例：原样返回记忆块，用于验证安装链路
+author: Example
+runtime_api: ">=0.1.0"
+
+spec:
+  config:
+    - name: threshold
+      type: int
+      default: 5
+      description: 阈值
+    - name: mode
+      type: string
+      enum: [soft, hard]
+      default: soft
+      description: 模式
+
+capabilities:
+  - transform.enhance

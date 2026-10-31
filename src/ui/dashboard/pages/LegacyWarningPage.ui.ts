@@ -3,6 +3,8 @@
 
 import { LegacyWarningUiState } from './LegacyWarningState.js';
 import { IconTextButton } from '../components/Common.ui.js';
+import { DbVersion } from '../../../db/DbVersion.js';
+import { logInfo } from '../../../utils/Logger.js';
 
 export interface LegacyWarningPageEvents {
   onRollback: () => void | Promise<void>;
@@ -18,6 +20,10 @@ export function LegacyWarningPage(
 ): ComposeNode {
   const cs = ctx.MaterialTheme.colorScheme;
   const items: ComposeNode[] = [];
+  const isV3 = state.dbVersion === DbVersion.V3;
+  const isV4 = state.dbVersion === DbVersion.V4;
+  // UNKNOWN（user_version=0 且表结构不完整）：只保留删除卡
+  const isUnknown = state.dbVersion === DbVersion.UNKNOWN;
 
   items.push(ctx.UI.Spacer({ height: 32 }));
 
@@ -26,18 +32,27 @@ export function LegacyWarningPage(
     fillMaxWidth: true,
     verticalAlignment: 'center'
   }, [
-    ctx.UI.Icon({ name: 'warning', size: 40, tint: '#FF6640' }),
+    ctx.UI.Icon({ name: 'warning', size: 40, tint: cs.error }),
     ctx.UI.Spacer({ width: 12 }),
     ctx.UI.Text({
-      text: '检测到旧版数据库',
-      fontSize: 22, fontWeight: 'bold', color: '#FF6640'
+      text: isV4 ? '数据库需要升级'
+        : isV3 ? '检测到旧版数据库'
+        : isUnknown ? '数据库结构不完整'
+        : '未知数据库版本',
+      fontSize: 22, fontWeight: 'bold', color: cs.error
     })
   ]));
 
   items.push(ctx.UI.Spacer({ height: 8 }));
 
   items.push(ctx.UI.Text({
-    text: 'OverMem v0.1.x 时期的数据格式，与当前版本不兼容',
+    text: isV4
+      ? '当前版本 v4，需要升级到 v5 以支持消息组策略。升级不会丢失任何数据。'
+      : isV3
+        ? 'OverMem v0.1.x 时期的数据格式，与当前版本不兼容'
+        : isUnknown
+          ? '当前数据库缺少核心表，无法自动迁移。建议删除重建，或从 bak/ 备份恢复。'
+          : '未知数据库版本，请重试',
     fontSize: 13, color: cs.onSurfaceVariant,
     modifier: ctx.Modifier.fillMaxWidth()
   }));
@@ -47,7 +62,7 @@ export function LegacyWarningPage(
   // ============================================
   // 方式一：导出
   // ============================================
-  items.push(ctx.UI.Card({
+  if (isV3) items.push(ctx.UI.Card({
     elevation: 2,
     modifier: ctx.Modifier.fillMaxWidth().padding({ bottom: 12 })
   }, [
@@ -95,7 +110,7 @@ export function LegacyWarningPage(
   // ============================================
   // 方式二：迁移
   // ============================================
-  items.push(ctx.UI.Card({
+  if (isV3 || isV4) items.push(ctx.UI.Card({
     elevation: 2,
     modifier: ctx.Modifier.fillMaxWidth().padding({ bottom: 12 })
   }, [
@@ -103,11 +118,16 @@ export function LegacyWarningPage(
       ctx.UI.Row({ verticalAlignment: 'center' }, [
         ctx.UI.Icon({ name: 'auto_fix_high', size: 20, tint: cs.primary }),
         ctx.UI.Spacer({ width: 8 }),
-        ctx.UI.Text({ text: '方式二：迁移到 v4（推荐）', fontSize: 15, fontWeight: 'bold', color: cs.primary })
+        ctx.UI.Text({
+          text: isV4 ? '方式二：升级到 v5（推荐）' : '方式二：迁移到 v4（推荐）',
+          fontSize: 15, fontWeight: 'bold', color: cs.primary
+        })
       ]),
       ctx.UI.Spacer({ height: 6 }),
       ctx.UI.Text({
-        text: '把旧库的消息、短期块、中期块、长期块全部迁移到新链式结构。原 scope 保留不变。',
+        text: isV4
+          ? '为数据库补充消息组策略所需的表结构。所有现有记忆数据保留。'
+          : '把旧库的消息、短期块、中期块、长期块全部迁移到新链式结构。原 scope 保留不变。',
         fontSize: 12, color: cs.onSurfaceVariant
       }),
       ctx.UI.Spacer({ height: 4 }),
@@ -118,13 +138,17 @@ export function LegacyWarningPage(
         ctx.UI.Icon({ name: 'shield', size: 14, tint: cs.primary }),
         ctx.UI.Spacer({ width: 4 }),
         ctx.UI.Text({
-          text: '迁移前会自动备份到 bak/ 文件夹。迁移失败时旧数据完好。',
+          text: isV4
+            ? '升级前会自动备份 mem.db 到 bak/ 文件夹。'
+            : '迁移前会自动备份到 bak/ 文件夹。迁移失败时旧数据完好。',
           fontSize: 11, color: cs.primary
         })
       ]),
       ctx.UI.Spacer({ height: 10 }),
       IconTextButton(ctx, {
-        text: state.busy && state.phase.indexOf('迁移') >= 0 ? '迁移中...' : '迁移数据',
+        text: isV4
+          ? (state.busy && state.phase.indexOf('迁移') >= 0 ? '升级中...' : '升级数据库')
+          : (state.busy && state.phase.indexOf('迁移') >= 0 ? '迁移中...' : '迁移数据'),
         icon: 'auto_fix_high',
         onClick: () => events.onMigrate(),
         enabled: !state.busy,
@@ -200,22 +224,24 @@ export function LegacyWarningPage(
   // ============================================
   // 回滚
   // ============================================
-  items.push(ctx.UI.Spacer({ height: 8 }));
-  items.push(ctx.UI.Text({
-    text: '或者回滚到旧版本 OverMem 继续使用',
-    fontSize: 12, color: cs.onSurfaceVariant,
-    modifier: ctx.Modifier.fillMaxWidth()
-  }));
-  items.push(ctx.UI.Spacer({ height: 4 }));
-  items.push(IconTextButton(ctx, {
-    text: '回滚到 v0.1.1',
-    icon: 'history',
-    onClick: () => events.onRollback(),
-    enabled: !state.busy,
-    containerColor: cs.surfaceVariant,
-    contentColor: cs.onSurfaceVariant,
-    modifier: ctx.Modifier.fillMaxWidth()
-  }));
+  if (isV3) {
+    items.push(ctx.UI.Spacer({ height: 8 }));
+    items.push(ctx.UI.Text({
+      text: '或者回滚到旧版本 OverMem 继续使用',
+      fontSize: 12, color: cs.onSurfaceVariant,
+      modifier: ctx.Modifier.fillMaxWidth()
+    }));
+    items.push(ctx.UI.Spacer({ height: 4 }));
+    items.push(IconTextButton(ctx, {
+      text: '回滚到 v0.1.1',
+      icon: 'history',
+      onClick: () => events.onRollback(),
+      enabled: !state.busy,
+      containerColor: cs.surfaceVariant,
+      contentColor: cs.onSurfaceVariant,
+      modifier: ctx.Modifier.fillMaxWidth()
+    }));
+  }
 
   // ============================================
   // 状态
@@ -241,6 +267,8 @@ export function LegacyWarningPage(
   }
 
   items.push(ctx.UI.Spacer({ height: 40 }));
+
+  logInfo("UI", `渲染 LegacyWarningPage: busy=${state.busy}, phase="${state.phase}"`);
 
   return ctx.UI.LazyColumn({ fillMaxSize: true, padding: 20 }, items);
 }

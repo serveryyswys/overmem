@@ -2,20 +2,19 @@
 const fs = require('fs');
 const path = require('path');
 
-// ============================================
-// 配置管理器 - 处理 .setuplock + settings.json
-// ============================================
+import { logInfo, logError, logDebug } from './Logger.js';
+import { sanPath, sanError } from './Sanitizer.js';
 
 const BASE_DIR = "/storage/emulated/0/Download/Operit/overmem/";
 const SETUP_LOCK_FILE = BASE_DIR + ".setuplock";
 const SETTINGS_FILE = BASE_DIR + "settings.json";
 
 export interface OverMemSettings {
-  basicUrl: string;        // 如 https://api.openai.com/v1
-  apiKey: string;          // 加密存储
-  model: string;           // 当前选中的模型
-  models: string[];        // 缓存的模型列表
-  encryptVersion: number;  // 加密版本号，用于未来升级
+  basicUrl: string;
+  apiKey: string;
+  model: string;
+  models: string[];
+  encryptVersion: number;
 }
 
 const DEFAULT_SETTINGS: OverMemSettings = {
@@ -26,46 +25,33 @@ const DEFAULT_SETTINGS: OverMemSettings = {
   encryptVersion: 1
 };
 
-function logInfo(msg: string): void {
-  NativeInterface.logInfo("[OverMem Config] " + msg);
-}
-
-function logError(msg: string): void {
-  NativeInterface.logError("[OverMem Config] " + msg);
-}
-
-// ============================================
-// 文件操作（Java Bridge）
-// ============================================
-
-// ============================================
-// 文件操作（node.operit fs）
-// ============================================
-
 function fileExists(p: string): boolean {
   try {
-    return fs.existsSync(p);
-  } catch (e) {
-    return false;
-  }
-}
-
-function deleteFile(p: string): boolean {
-  try {
-    fs.unlinkSync(p);
-    return true;
-  } catch (e) {
+    const exists = fs.existsSync(p);
+    logDebug("ConfigFile", `exists ${sanPath(p)} = ${exists}`);
+    return exists;
+  } catch (e: any) {
+    logError("ConfigFile", `exists 检查失败 ${sanPath(p)}: ${sanError(e)}`);
     return false;
   }
 }
 
 function readFile(p: string): string | null {
   try {
-    if (!fs.existsSync(p)) return null;
+    if (!fs.existsSync(p)) {
+      logDebug("ConfigFile", `readFile ${sanPath(p)}：文件不存在`);
+      return null;
+    }
     const content = fs.readFileSync(p, 'utf8');
-    return content.trim();
+    if (typeof content !== 'string') {
+      logError("ConfigFile", `readFile ${sanPath(p)}：返回非字符串 type=${typeof content}`);
+      return null;
+    }
+    const trimmed = content.trim();
+    logDebug("ConfigFile", `readFile ${sanPath(p)}：长度=${trimmed.length}`);
+    return trimmed;
   } catch (e: any) {
-    logError("读取文件失败: " + e.message);
+    logError("ConfigFile", `readFile ${sanPath(p)} 失败: ${sanError(e)}`);
     return null;
   }
 }
@@ -77,19 +63,13 @@ function writeFile(p: string, content: string): boolean {
       fs.mkdirSync(dir, { recursive: true });
     }
     fs.writeFileSync(p, content, 'utf8');
+    logInfo("ConfigFile", `writeFile ${sanPath(p)}：长度=${content.length}`);
     return true;
   } catch (e: any) {
-    logError("写入文件失败: " + e.message);
+    logError("ConfigFile", `writeFile ${sanPath(p)} 失败: ${sanError(e)}`);
     return false;
   }
 }
-
-// ============================================
-// 简单对称加密（异或 + Base64）
-// ============================================
-
-// 注意：这是简单混淆，生产环境建议用 AES
-// 但 Operit 环境无法引入第三方加密库，用此方案足够防止明文泄露
 
 const XOR_KEY = "OverMem_2024_Secret_Key_v1";
 
@@ -101,16 +81,15 @@ function encryptApiKey(plain: string): string {
       const charCode = plain.charCodeAt(i) ^ keyChar;
       result += String.fromCharCode(charCode);
     }
-    // Base64 编码
     return btoa(result);
-  } catch (e) {
-    return plain;
+  } catch (e: any) {
+    logError("Config", `encryptApiKey 失败: ${sanError(e)}`);
+    return "";
   }
 }
 
 function decryptApiKey(encrypted: string): string {
   try {
-    // Base64 解码
     const decoded = atob(encrypted);
     let result = "";
     for (let i = 0; i < decoded.length; i++) {
@@ -119,14 +98,13 @@ function decryptApiKey(encrypted: string): string {
       result += String.fromCharCode(charCode);
     }
     return result;
-  } catch (e) {
-    return encrypted;
+  } catch (e: any) {
+    logError("Config", `decryptApiKey 失败: ${sanError(e)}`);
+    return "";
   }
 }
 
-// btoa/atob polyfill（Operit 环境可能没有）
 function btoa(str: string): string {
-  // 简单 Base64 实现
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
   let result = '';
   let i = 0;
@@ -160,73 +138,70 @@ function atob(str: string): string {
   return result;
 }
 
-// ============================================
-// 配置管理 API
-// ============================================
-
-/**
- * 检查是否已初始化
- */
 export function isSetupComplete(): boolean {
-  return fileExists(SETUP_LOCK_FILE);
+  const complete = fileExists(SETUP_LOCK_FILE);
+  logInfo("Config", `isSetupComplete: ${complete}`);
+  return complete;
 }
 
-/**
- * 读取配置（自动解密 API Key）
- */
 export function loadSettings(): OverMemSettings | null {
   try {
+    logInfo("Config", `loadSettings 开始`);
     const content = readFile(SETTINGS_FILE);
-    if (!content) return null;
-    
-    const raw = JSON.parse(content);
+    if (!content) {
+      logInfo("Config", `loadSettings：文件不存在或为空`);
+      return null;
+    }
+
+    let raw: any;
+    try {
+      raw = JSON.parse(content);
+    } catch (e: any) {
+      logError("Config", `loadSettings JSON 解析失败: ${sanError(e)}`);
+      return null;
+    }
+
+    if (!raw || typeof raw !== 'object') {
+      logError("Config", `loadSettings 解析结果非对象 type=${typeof raw}`);
+      return null;
+    }
+
     const settings: OverMemSettings = {
       basicUrl: raw.basicUrl || "",
       apiKey: raw.apiKey || "",
       model: raw.model || "",
-      models: raw.models || [],
+      models: Array.isArray(raw.models) ? raw.models : [],
       encryptVersion: raw.encryptVersion || 1
     };
-    
-    // 如果 apiKey 是加密的，解密
-    if (settings.apiKey && settings.apiKey.startsWith("enc:")) {
-      const encrypted = settings.apiKey.substring(4);
-      settings.apiKey = decryptApiKey(encrypted);
+
+    if (settings.apiKey && settings.apiKey.indexOf("enc:") === 0) {
+      settings.apiKey = decryptApiKey(settings.apiKey.substring(4));
     }
-    
+
+    logInfo("Config",
+      `loadSettings 完成：basicUrl=${settings.basicUrl}, model=${settings.model}, apiKeyLen=${settings.apiKey.length}, models=${settings.models.length}`);
     return settings;
   } catch (e: any) {
-    logError("读取配置失败: " + e.message);
-    // 配置文件损坏，删除它
-    if (fileExists(SETTINGS_FILE)) {
-      deleteFile(SETTINGS_FILE);
-    }
+    logError("Config", `loadSettings 失败: ${sanError(e)}`);
     return null;
   }
 }
 
-/**
- * 保存配置（自动加密 API Key）
- */
 export function saveSettings(settings: OverMemSettings): boolean {
   try {
-    // 加密 API Key
     const toSave = { ...settings };
     if (toSave.apiKey) {
       toSave.apiKey = "enc:" + encryptApiKey(toSave.apiKey);
     }
-    
     const content = JSON.stringify(toSave, null, 2);
+    logInfo("Config", `saveSettings：长度=${content.length}`);
     return writeFile(SETTINGS_FILE, content);
   } catch (e: any) {
-    logError("保存配置失败: " + e.message);
+    logError("Config", `saveSettings 失败: ${sanError(e)}`);
     return false;
   }
 }
 
-/**
- * 标记初始化完成
- */
 export function markSetupComplete(): boolean {
   try {
     const dir = path.dirname(SETUP_LOCK_FILE);
@@ -236,66 +211,64 @@ export function markSetupComplete(): boolean {
     if (!fs.existsSync(SETUP_LOCK_FILE)) {
       fs.writeFileSync(SETUP_LOCK_FILE, '', 'utf8');
     }
+    logInfo("Config", `markSetupComplete：成功`);
     return true;
   } catch (e: any) {
-    logError("创建 .setuplock 失败: " + e.message);
+    logError("Config", `markSetupComplete 失败: ${sanError(e)}`);
     return false;
   }
 }
 
-/**
- * 重置配置（删除 .setuplock + settings.json）
- */
 export function resetConfig(): void {
-  if (fileExists(SETUP_LOCK_FILE)) deleteFile(SETUP_LOCK_FILE);
-  if (fileExists(SETTINGS_FILE)) deleteFile(SETTINGS_FILE);
+  logInfo("Config", `resetConfig`);
+  if (fileExists(SETUP_LOCK_FILE)) {
+    try { fs.unlinkSync(SETUP_LOCK_FILE); } catch (_) {}
+  }
+  if (fileExists(SETTINGS_FILE)) {
+    try { fs.unlinkSync(SETTINGS_FILE); } catch (_) {}
+  }
 }
 
-/**
- * 获取模型列表（调用 AI 供应商）
- */
 export async function fetchModels(basicUrl: string, apiKey: string): Promise<string[]> {
   try {
-    var url = basicUrl.trim();
+    let url = basicUrl.trim();
     if (!url.startsWith("http://") && !url.startsWith("https://")) {
       url = "https://" + url;
     }
     if (!url.endsWith("/")) url += "/";
     url += "models";
-    
-    logInfo("获取模型列表: " + url);
-    
-    // 获取 Java 类
-    var OkHttpClient = Java.type("okhttp3.OkHttpClient");
-    var Request = Java.type("okhttp3.Request");
-    var TimeUnit = Java.type("java.util.concurrent.TimeUnit");
-    
-    // 正确构建 OkHttpClient
-    var client = new OkHttpClient.Builder()
+
+    logInfo("Config", `fetchModels: ${url}`);
+
+    const OkHttpClient = Java.type("okhttp3.OkHttpClient");
+    const Request = Java.type("okhttp3.Request");
+    const TimeUnit = Java.type("java.util.concurrent.TimeUnit");
+
+    const client = new OkHttpClient.Builder()
       .connectTimeout(30, TimeUnit.SECONDS)
       .readTimeout(30, TimeUnit.SECONDS)
       .writeTimeout(30, TimeUnit.SECONDS)
       .build();
-    
-    var request = new Request.Builder()
+
+    const request = new Request.Builder()
       .url(url)
       .header("Authorization", "Bearer " + apiKey)
       .header("Content-Type", "application/json")
       .get()
       .build();
-    
-    var response = client.newCall(request).execute();
-    var body = response.body().string();
-    var code = response.code();
+
+    const response = client.newCall(request).execute();
+    const body = response.body().string();
+    const code = response.code();
     response.close();
-    
-    logInfo("模型列表响应码: " + code);
-    
+
+    logInfo("Config", `fetchModels 响应码: ${code}`);
+
     if (code < 200 || code >= 300) {
       throw new Error("HTTP " + code + ": " + body.substring(0, 200));
     }
-    
-    var data = JSON.parse(body);
+
+    const data = JSON.parse(body);
     if (data.data && Array.isArray(data.data)) {
       return data.data.map(function(item: any) { return item.id || item.model || item; });
     }
@@ -307,54 +280,50 @@ export async function fetchModels(basicUrl: string, apiKey: string): Promise<str
     }
     return [];
   } catch (e: any) {
-    logError("获取模型列表失败: " + e.message);
+    logError("Config", `fetchModels 失败: ${sanError(e)}`);
     throw e;
   }
 }
 
-/**
- * 测试连接性
- */
 export async function testConnection(basicUrl: string, apiKey: string): Promise<{ success: boolean; message: string }> {
   try {
-    var url = basicUrl.trim();
+    let url = basicUrl.trim();
     if (!url.startsWith("http://") && !url.startsWith("https://")) {
       url = "https://" + url;
     }
     if (!url.endsWith("/")) url += "/";
     url += "models";
-    
-    var OkHttpClient = Java.type("okhttp3.OkHttpClient");
-    var Request = Java.type("okhttp3.Request");
-    var TimeUnit = Java.type("java.util.concurrent.TimeUnit");
-    
-    // 正确构建 OkHttpClient
-    var client = new OkHttpClient.Builder()
+
+    const OkHttpClient = Java.type("okhttp3.OkHttpClient");
+    const Request = Java.type("okhttp3.Request");
+    const TimeUnit = Java.type("java.util.concurrent.TimeUnit");
+
+    const client = new OkHttpClient.Builder()
       .connectTimeout(10, TimeUnit.SECONDS)
       .readTimeout(10, TimeUnit.SECONDS)
       .writeTimeout(10, TimeUnit.SECONDS)
       .build();
-    
-    var request = new Request.Builder()
+
+    const request = new Request.Builder()
       .url(url)
       .header("Authorization", "Bearer " + apiKey)
       .get()
       .build();
-    
-    var response = client.newCall(request).execute();
-    var code = response.code();
-    var body = response.body().string();
+
+    const response = client.newCall(request).execute();
+    const code = response.code();
+    const body = response.body().string();
     response.close();
-    
-    logInfo("测试连接响应码: " + code);
-    
+
+    logInfo("Config", `testConnection 响应码: ${code}`);
+
     if (code >= 200 && code < 300) {
       return { success: true, message: "连接成功！" };
     } else {
       return { success: false, message: "HTTP " + code + ": " + body.substring(0, 100) };
     }
   } catch (e: any) {
-    logError("测试连接失败: " + e.message);
+    logError("Config", `testConnection 失败: ${sanError(e)}`);
     return { success: false, message: e.message || "连接失败" };
   }
 }

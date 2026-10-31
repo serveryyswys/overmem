@@ -1,0 +1,49 @@
+name: overmem-runtime
+
+services:
+  plugin-runtime:
+    image: ${OVERMEM_IMAGE:-ghcr.io/serveryyswys/overmem-plugin-runtime}:${OVERMEM_TAG:-0.1.0}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        OVERMEM_VERSION: ${OVERMEM_TAG:-0.1.0}
+    container_name: overmem-runtime
+    restart: unless-stopped
+    init: true
+    ports:
+      # 默认只绑定本机回环；对外暴露请改成 0.0.0.0 并放在反向代理后面
+      - "${OVERMEM_BIND:-127.0.0.1}:${OVERMEM_PORT:-8765}:8765"
+    environment:
+      OVERMEM_RUNTIME_MODE: docker
+      OVERMEM_BASE_DIR: /data
+      OVERMEM_PLUGIN_DIR: /data/plugins
+      OVERMEM_DATA_DIR: /data/data
+      # 不设则首次启动随机生成并持久化到 /data/data/.jwt_secret
+      OVERMEM_JWT_SECRET: ${OVERMEM_JWT_SECRET:-}
+      OVERMEM_JWT_TTL: ${OVERMEM_JWT_TTL:-3600}
+      # 设置后 /admin 管理后台走 HTTP Basic
+      OVERMEM_ADMIN_USERNAME: ${OVERMEM_ADMIN_USERNAME:-}
+      OVERMEM_ADMIN_PASSWORD: ${OVERMEM_ADMIN_PASSWORD:-}
+      # 首次启动预置的 API Key（不设则自动生成并写入 /data/data/bootstrap_key.txt）
+      OVERMEM_BOOTSTRAP_KEY: ${OVERMEM_BOOTSTRAP_KEY:-}
+      OVERMEM_LOGS_CAPACITY: ${OVERMEM_LOGS_CAPACITY:-500}
+    volumes:
+      - overmem-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=3).status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  overmem-data:

@@ -88,6 +88,12 @@ export class MemoryInjector {
     }
     queue.forEach((q, idx) => q.order = idx);
 
+    // ---- 插件运行时接入点（0.4.0 不启用）----
+    // buildQueue 目前是同步方法，插件链路是异步的；等 PluginPipeline 稳定后
+    // 再把它改成 async 并在 return 前接上：
+    //   const pipelined = await PluginPipeline.getInstance().transform(queue);
+    //   queue = pipelined;
+
     return { queue, activated };
   }
 

@@ -15,9 +15,8 @@ export interface SettingsPageEvents {
   onRefreshLogSize: () => void;
   onDeleteLog: () => void;
   onResetAiConfig: () => void;
-  onLoadCards: () => void | Promise<void>;
-  onClearCards: () => void;
-  onSelectCard: (id: string, name: string) => void;
+  onOpenMessageGroups: () => void;
+  onRefreshMessageGroups: () => void;
   onInstallClient: () => void | Promise<void>;
   onRefreshClientStatus: () => void | Promise<void>;
   onOpenAddons: () => void;
@@ -35,8 +34,7 @@ export function SettingsPage(
   items.push(renderAiCard(ctx, state, events));
   items.push(renderThresholdCard(ctx, state, events));
   items.push(renderInjectCard(ctx, state, events));
-  items.push(renderPassthroughCard(ctx, state, events));
-  items.push(renderPersonalityCard(ctx, state, events));
+  items.push(renderMessageGroupsCard(ctx, state, events));
   items.push(renderDebugCard(ctx, state, events));
   items.push(renderActionCard(ctx, state, events));
   items.push(renderLogCard(ctx, state, events));
@@ -270,178 +268,67 @@ function renderInjectCard(
   }, [ctx.UI.Column({ padding: 14 }, children)]);
 }
 
-// ---------------- 透传 ----------------
+// ---------------- 消息组策略 ----------------
 
-function renderPassthroughCard(
+function renderMessageGroupsCard(
   ctx: ComposeDslContext, s: SettingsUiState, e: SettingsPageEvents
 ): ComposeNode {
   const cs = ctx.MaterialTheme.colorScheme;
-  const radio = (label: string, value: 'none' | 'role_card' | 'global') =>
-    ctx.UI.Row({ verticalAlignment: 'center' }, [
-      ctx.UI.RadioButton({
-        selected: s.passthroughMode === value,
-        onClick: () => e.onPatch({ passthroughMode: value })
-      }),
-      ctx.UI.Spacer({ width: 4 }),
-      ctx.UI.Text({ text: label, fontSize: 12, color: cs.onSurface })
-    ]);
-
-  const desc = s.passthroughMode === 'none' ? '每个会话独立存储记忆'
-    : s.passthroughMode === 'role_card' ? '同一角色卡的所有会话共享记忆'
-      : '所有会话共享同一个记忆库';
-
   return ctx.UI.Card({
     elevation: 2,
     modifier: ctx.Modifier.fillMaxWidth().padding({ bottom: 10 })
   }, [
     ctx.UI.Column({ padding: 14 }, [
-      ctx.UI.Text({ text: '透传设置', fontSize: 15, fontWeight: 'bold' }),
-      ctx.UI.Spacer({ height: 4 }),
-      ctx.UI.Text({ text: '选择记忆共享范围：', fontSize: 11, color: cs.onSurfaceVariant }),
-      ctx.UI.Spacer({ height: 4 }),
-      ctx.UI.LazyRow({ horizontalArrangement: 'start', fillMaxWidth: true, spacing: 12 }, [
-        radio('独立会话', 'none'),
-        radio('同角色卡', 'role_card'),
-        radio('全局共享', 'global')
+      ctx.UI.Row({
+        horizontalArrangement: 'spaceBetween',
+        fillMaxWidth: true,
+        verticalAlignment: 'center'
+      }, [
+        ctx.UI.Row({ verticalAlignment: 'center' }, [
+          ctx.UI.Icon({ name: 'link', size: 18, tint: cs.primary }),
+          ctx.UI.Spacer({ width: 8 }),
+          ctx.UI.Text({ text: '消息组策略', fontSize: 15, fontWeight: 'bold' })
+        ]),
+        ctx.UI.IconButton({
+          icon: 'refresh',
+          onClick: () => e.onRefreshMessageGroups(),
+          modifier: ctx.Modifier.width(32).height(32)
+        })
       ]),
+      ctx.UI.Spacer({ height: 4 }),
       ctx.UI.Text({
-        text: desc, fontSize: 11, color: cs.onSurfaceVariant,
-        modifier: ctx.Modifier.padding({ top: 2 })
+        text: '决定哪些会话的记忆共享。未命中任何组的会话使用独立会话模式。',
+        fontSize: 11, color: cs.onSurfaceVariant
+      }),
+      ctx.UI.Spacer({ height: 8 }),
+      ctx.UI.Row({ verticalAlignment: 'center' }, [
+        ctx.UI.Icon({ name: 'check_circle', size: 14, tint: cs.primary }),
+        ctx.UI.Spacer({ width: 4 }),
+        ctx.UI.Text({
+          text: `有效组：${s.messageGroupCount}`,
+          fontSize: 12, color: cs.primary
+        }),
+        s.messageGroupInvalidCount > 0
+          ? ctx.UI.Row({ verticalAlignment: 'center', modifier: ctx.Modifier.padding({ start: 12 }) }, [
+              ctx.UI.Icon({ name: 'warning', size: 14, tint: cs.error }),
+              ctx.UI.Spacer({ width: 4 }),
+              ctx.UI.Text({
+                text: `无效：${s.messageGroupInvalidCount}`,
+                fontSize: 12, color: cs.error
+              })
+            ])
+          : ctx.UI.Spacer({ width: 0 })
+      ]),
+      ctx.UI.Spacer({ height: 8 }),
+      ctx.UI.Button({
+        text: '管理组策略',
+        onClick: e.onOpenMessageGroups,
+        containerColor: cs.secondaryContainer,
+        contentColor: cs.onSecondaryContainer,
+        modifier: ctx.Modifier.fillMaxWidth().padding({ top: 4 })
       })
     ])
   ]);
-}
-
-// ---------------- 人格 ----------------
-
-function renderPersonalityCard(
-  ctx: ComposeDslContext, s: SettingsUiState, e: SettingsPageEvents
-): ComposeNode {
-  const cs = ctx.MaterialTheme.colorScheme;
-  const children: ComposeNode[] = [];
-
-  children.push(ctx.UI.Text({ text: '人格设定', fontSize: 15, fontWeight: 'bold' }));
-  children.push(ctx.UI.Spacer({ height: 4 }));
-  children.push(ctx.UI.Text({
-    text: 'AI 将以选定的人格视角整理记忆',
-    fontSize: 11, color: cs.onSurfaceVariant
-  }));
-  children.push(ctx.UI.Spacer({ height: 8 }));
-
-  children.push(ctx.UI.Row({ horizontalArrangement: 'spaceEvenly', fillMaxWidth: true }, [
-    IconTextButton(ctx, {
-      text: '自动匹配',
-      icon: 'auto_awesome',
-      onClick: () => e.onPatch({ personalityMode: 'auto' }),
-      iconSize: 16,
-      containerColor: s.personalityMode === 'auto' ? cs.primary : cs.surfaceVariant,
-      contentColor: s.personalityMode === 'auto' ? cs.onPrimary : cs.onSurfaceVariant,
-      modifier: ctx.Modifier.weight(1).padding(4)
-    }),
-    IconTextButton(ctx, {
-      text: '手动选择',
-      icon: 'touch_app',
-      onClick: () => e.onPatch({ personalityMode: 'manual' }),
-      iconSize: 16,
-      containerColor: s.personalityMode === 'manual' ? cs.primary : cs.surfaceVariant,
-      contentColor: s.personalityMode === 'manual' ? cs.onPrimary : cs.onSurfaceVariant,
-      modifier: ctx.Modifier.weight(1).padding(4)
-    })
-  ]));
-  children.push(ctx.UI.Spacer({ height: 8 }));
-
-  if (s.personalityMode === 'auto') {
-    children.push(ctx.UI.Row({ verticalAlignment: 'center' }, [
-      ctx.UI.Icon({ name: 'info', size: 14, tint: cs.onSurfaceVariant }),
-      ctx.UI.Spacer({ width: 4 }),
-      ctx.UI.Text({
-        text: '将自动使用每个会话绑定的角色卡',
-        fontSize: 12, color: cs.onSurfaceVariant
-      })
-    ]));
-  } else {
-    if (s.isLoadingCards) {
-      children.push(ctx.UI.Row({
-        horizontalArrangement: 'center', fillMaxWidth: true,
-        modifier: ctx.Modifier.padding({ vertical: 16 })
-      }, [
-        ctx.UI.CircularProgressIndicator({ modifier: ctx.Modifier.width(20).height(20) }),
-        ctx.UI.Spacer({ width: 8 }),
-        ctx.UI.Text({ text: '加载角色卡中...', fontSize: 13, color: cs.onSurfaceVariant })
-      ]));
-    } else if (s.availableCards.length === 0) {
-      children.push(ctx.UI.Text({
-        text: '尚未获取角色卡列表',
-        fontSize: 12, color: cs.onSurfaceVariant,
-        modifier: ctx.Modifier.padding({ top: 4 })
-      }));
-      children.push(ctx.UI.Spacer({ height: 6 }));
-      children.push(IconTextButton(ctx, {
-        text: '获取角色卡列表',
-        icon: 'cloud_download',
-        onClick: e.onLoadCards,
-        containerColor: cs.secondaryContainer,
-        contentColor: cs.onSecondaryContainer,
-        modifier: ctx.Modifier.fillMaxWidth().padding(4)
-      }));
-    } else {
-      children.push(ctx.UI.Text({
-        text: '选择角色卡（共 ' + s.availableCards.length + ' 个）',
-        fontSize: 13, color: cs.onSurfaceVariant
-      }));
-      children.push(ctx.UI.Spacer({ height: 4 }));
-      const chips = s.availableCards.slice(0, 12).map((card) => {
-        const sel = s.personalityCardId === card.id;
-        return ctx.UI.Surface({
-          containerColor: sel ? cs.primary : cs.surfaceVariant,
-          shape: { type: 'rounded', cornerRadius: 16 },
-          modifier: ctx.Modifier.padding(4).clickable(() => e.onSelectCard(card.id, card.name)),
-          shadowElevation: sel ? 2 : 0
-        }, [
-          ctx.UI.Text({
-            text: card.name, fontSize: 11,
-            color: sel ? cs.onPrimary : cs.onSurfaceVariant,
-            modifier: ctx.Modifier.padding({ horizontal: 10, vertical: 4 })
-          })
-        ]);
-      });
-      children.push(ctx.UI.LazyRow({
-        horizontalArrangement: 'start', fillMaxWidth: true, spacing: 4
-      }, chips));
-      if (s.availableCards.length > 12) {
-        children.push(ctx.UI.Text({
-          text: '... 还有 ' + (s.availableCards.length - 12) + ' 个',
-          fontSize: 11, color: cs.onSurfaceVariant
-        }));
-      }
-      children.push(ctx.UI.Spacer({ height: 6 }));
-      children.push(ctx.UI.Row({ horizontalArrangement: 'spaceEvenly', fillMaxWidth: true }, [
-        IconTextButton(ctx, {
-          text: '重新获取',
-          icon: 'refresh',
-          onClick: e.onLoadCards,
-          iconSize: 16,
-          containerColor: cs.secondaryContainer,
-          contentColor: cs.onSecondaryContainer,
-          modifier: ctx.Modifier.weight(1).padding(4)
-        }),
-        IconTextButton(ctx, {
-          text: '清空列表',
-          icon: 'clear_all',
-          onClick: e.onClearCards,
-          iconSize: 16,
-          containerColor: cs.errorContainer,
-          contentColor: cs.onErrorContainer,
-          modifier: ctx.Modifier.weight(1).padding(4)
-        })
-      ]));
-    }
-  }
-
-  return ctx.UI.Card({
-    elevation: 2,
-    modifier: ctx.Modifier.fillMaxWidth().padding({ bottom: 10 })
-  }, [ctx.UI.Column({ padding: 14 }, children)]);
 }
 
 // ---------------- 调试 ----------------

@@ -5,7 +5,7 @@
 // 基础枚举
 // ============================================
 
-export type ScopeType = 'session' | 'role_card' | 'global';
+export type ScopeType = 'session' | 'group' | 'role_card' | 'global';
 
 export type MemoryLevel = 'short' | 'mid' | 'long';
 
@@ -79,11 +79,11 @@ export interface OverMemConfig {
   midThreshold: number;
   longThreshold: number;
 
-  // 透传
+  // 透传（迁移前使用；迁移后不再读取）
   sessionPassthrough: boolean;
   globalPassthrough: boolean;
 
-  // 人格
+  // 人格（迁移前使用；迁移后不再读取）
   personalityMode: 'auto' | 'manual';
   personalityCardId: string;
   personalityCustomText: string;
@@ -97,15 +97,15 @@ export interface OverMemConfig {
   recallConfuseProbability: number;
 
   // 衰减
-  timeEdgeDecayDays: number;    // time 边衰减半衰期（天）
-  foldEdgeBaseWeight: number;   // fold 边初始权重
-  recallEdgeDecayDays: number;  // recall 边衰减半衰期
-  edgeDeathThreshold: number;   // 边低于此权重视为死亡
+  timeEdgeDecayDays: number;
+  foldEdgeBaseWeight: number;
+  recallEdgeDecayDays: number;
+  edgeDeathThreshold: number;
 
   // 激活
-  activationSeedWeight: number;    // 种子节点初始激活
-  activationHopDecay: number;      // 每跳衰减
-  activationMinThreshold: number;  // 低于此激活值不再扩散
+  activationSeedWeight: number;
+  activationHopDecay: number;
+  activationMinThreshold: number;
 
   // 调试
   debugMode: boolean;
@@ -114,21 +114,21 @@ export interface OverMemConfig {
   // 系统
   initTimestamp: number;
   version: number;
+
   // 噪音
-  noiseTemperature: number;         // 0.0 ~ 1.0，默认 0.3
-  synapticFailureEnabled: boolean;  // 是否启用突触传递失败，默认 true
-  
-  lastReplayAt: number;        // ← 上次睡眠重放时间戳
-  replayIntervalMs: number;    // ← 重放间隔（默认 6h）
-  replayMinBatch: number;      // ← 触发最小批
-  replayBatchSize: number;     // ← 每次折叠量
+  noiseTemperature: number;
+  synapticFailureEnabled: boolean;
+
+  lastReplayAt: number;
+  replayIntervalMs: number;
+  replayMinBatch: number;
+  replayBatchSize: number;
 }
 
 // ============================================
 // 结构化元数据
 // ============================================
 
-/** 主题层元数据（mid） */
 export interface ThemeMeta {
   type: 'theme';
   title: string;
@@ -139,7 +139,6 @@ export interface ThemeMeta {
   recurringPatterns: string[];
 }
 
-/** 叙事层元数据（long） */
 export interface NarrativeMeta {
   type: 'narrative';
   title: string;
@@ -166,6 +165,40 @@ export interface SessionMeta {
 }
 
 // ============================================
+// 消息组策略
+// ============================================
+
+export interface MessageGroupInclusions {
+  roleCards: string[];
+  sessions: string[];
+}
+
+export interface MessageGroupExclusions {
+  roleCards: string[];
+  sessions: string[];
+}
+
+export interface MessageGroupPersonality {
+  mode: 'auto' | 'manual';
+  cardId: string;
+  name: string;
+  customText: string;
+}
+
+export interface MessageGroup {
+  groupId: string;
+  orderIndex: number;
+  name: string;
+  isGlobal: boolean;
+  inclusions: MessageGroupInclusions;
+  exclusions: MessageGroupExclusions;
+  personality: MessageGroupPersonality;
+  enabled: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+// ============================================
 // 激活结果
 // ============================================
 
@@ -173,7 +206,7 @@ export interface ActivatedNode {
   node: MemoryNode;
   activation: number;
   via: 'seed' | 'time' | 'fold' | 'recall';
-  distance: number;   // 跳数
+  distance: number;
   parentId: number;
 }
 

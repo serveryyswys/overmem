@@ -6,10 +6,10 @@
   "license": "GPL-3.0-or-later",
   "scripts": {
     "watch": "tsc --watch",
-    "build": "opm build"
+    "build": "tsc -p tsconfig.json && opm build --skip-compile"
   },
   "devDependencies": {
-    "@serveryyswys/node.operit": "^0.1.7",
+    "@serveryyswys/node.operit": "^0.1.10",
     "@serveryyswys/opm": "^0.1.7",
     "@types/node": "^26.6.5",
     "typescript": "^5.0.0"
