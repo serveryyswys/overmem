@@ -88,7 +88,8 @@ export function HomePage(
     }, [
       tabBtn('欢迎', 'home', 'welcome'),
       tabBtn('记忆', 'book', 'sessions'),
-      tabBtn('加载项', 'extension', 'addons'),
+      // 0.3.0 暂不提供插件系统，加载项入口暂时关闭
+      // tabBtn('加载项', 'extension', 'addons'),
       tabBtn('设置', 'settings', 'settings')
     ]),
 
@@ -96,9 +97,10 @@ export function HomePage(
       ? WelcomePage(ctx, welcome, { onRefresh: events.onRefreshWelcome })
       : welcome.homeTab === 'sessions'
         ? renderSessionsTab(ctx, welcome, overview, sessions, events)
-        : welcome.homeTab === 'addons'
-          ? AddonsTab(ctx, addons, events.addons)
-          : SettingsPage(ctx, settings, events.settings)
+        // 0.3.0 暂不提供插件系统，加载项页面暂时关闭
+        // : welcome.homeTab === 'addons'
+        //   ? AddonsTab(ctx, addons, events.addons)
+        : SettingsPage(ctx, settings, events.settings)
   ]);
 }
 

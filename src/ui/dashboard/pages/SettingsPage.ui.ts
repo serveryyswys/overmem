@@ -666,15 +666,16 @@ function renderBottomEntries(
   const cs = ctx.MaterialTheme.colorScheme;
   return ctx.UI.Column({}, [
     ctx.UI.Spacer({ height: 8 }),
-    IconTextButton(ctx, {
-      text: '加载项',
-      icon: 'extension',
-      onClick: e.onOpenAddons,
-      containerColor: cs.secondaryContainer,
-      contentColor: cs.onSecondaryContainer,
-      modifier: ctx.Modifier.fillMaxWidth().padding({ top: 4 })
-    }),
-    ctx.UI.Spacer({ height: 8 }),
+    // 0.3.0 暂不提供插件系统，加载项入口暂时关闭
+    // IconTextButton(ctx, {
+    //   text: '加载项',
+    //   icon: 'extension',
+    //   onClick: e.onOpenAddons,
+    //   containerColor: cs.secondaryContainer,
+    //   contentColor: cs.onSecondaryContainer,
+    //   modifier: ctx.Modifier.fillMaxWidth().padding({ top: 4 })
+    // }),
+    // ctx.UI.Spacer({ height: 8 }),
     IconTextButton(ctx, {
       text: '关于本软件',
       icon: 'info',

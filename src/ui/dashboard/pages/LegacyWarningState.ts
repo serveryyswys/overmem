@@ -9,6 +9,8 @@ import { setUserVersion, DbVersion } from '../../../db/DbVersion.js';
 import { LegacyMigration, MigrationResult } from '../../../db/LegacyMigration.js';
 import { logInfo, logError } from '../../../utils/Logger.js';
 
+const fs = require('fs');
+
 const DB_PATH = "/storage/emulated/0/Download/Operit/overmem/mem.db";
 const EXPORT_DIR = "/storage/emulated/0/Download/Operit/overmem/";
 
@@ -178,30 +180,34 @@ export class LegacyWarningStateHolder {
         const backupPath = '/storage/emulated/0/Download/Operit/overmem/bak/mem_v4_' + stamp + '.db';
 
         try {
-          const File = Java.type('java.io.File');
-          const bakDir = new File('/storage/emulated/0/Download/Operit/overmem/bak');
-          if (!bakDir.exists()) bakDir.mkdirs();
-        } catch (_) {}
+          const bakDir = '/storage/emulated/0/Download/Operit/overmem/bak';
+          if (!fs.existsSync(bakDir)) {
+            fs.mkdirSync(bakDir, { recursive: true });
+          }
 
-        try {
-          const Files = Java.type('java.nio.file.Files');
-          const Paths = Java.type('java.nio.file.Paths');
-          const StandardCopyOption = Java.type('java.nio.file.StandardCopyOption');
-          Files.copy(
-            Paths.get(DB_PATH),
-            Paths.get(backupPath),
-            StandardCopyOption.REPLACE_EXISTING
-          );
+          // 优先使用 copyFileSync，它是 node.operit 封装的纯文件复制，不经过 Java 复杂对象
+          fs.copyFileSync(DB_PATH, backupPath);
+
           this.patch({ backupPath, phase: '备份完成，开始迁移到 v5...' });
           logInfo("LegacyWarning", `v4 备份已保存: ${backupPath}`);
         } catch (e: any) {
-          this.patch({
-            busy: false, phase: '',
-            message: '备份失败，迁移已中止（数据未改动）: ' + e.message,
-            lastResult: 'none'
-          });
-          this.dashboard.showBanner('备份失败', 'error');
-          return;
+          logError("LegacyWarning", `v4 备份失败: ${e.message || e}`);
+          // 兜底：如果 copyFileSync 内部也因为某些原因失败，用 buffer 流式读写（最底层，最稳定）
+          try {
+            const data = fs.readFileSync(DB_PATH);
+            fs.writeFileSync(backupPath, data);
+            this.patch({ backupPath, phase: '备份完成（Buffer 兜底），开始迁移到 v5...' });
+            logInfo("LegacyWarning", `v4 备份已保存（Buffer 兜底）: ${backupPath}`);
+          } catch (e2: any) {
+            logError("LegacyWarning", `v4 备份兜底也失败: ${e2.message || e2}`);
+            this.patch({
+              busy: false, phase: '',
+              message: '备份失败，迁移已中止（数据未改动）: ' + (e2.message || e2),
+              lastResult: 'none'
+            });
+            this.dashboard.showBanner('备份失败', 'error');
+            return;
+          }
         }
 
         // 2. 执行 v4 → v5
