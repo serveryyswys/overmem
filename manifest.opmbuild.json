@@ -1,5 +1,5 @@
 {
-  "out_name": "com.operit.overmem.2.0.3.0-indev.toolpkg",
+  "out_name": "com.operit.overmem.2.0.3.0",
   "extra_files": ["LICENSE"],
   "packinfo": { "enable": true }
 }

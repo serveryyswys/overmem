@@ -605,17 +605,27 @@ function renderClientCard(
     children.push(ctx.UI.Spacer({ height: 8 }));
   }
 
-  // 操作按钮
-  const label = s.clientInstalling
-    ? (s.downloadActive ? '下载中…' : '安装中…')
-    : (s.clientInstalled ? (e.clientHasUpdate() ? '更新客户端' : '重新安装') : '安装客户端');
+  // 操作按钮（暂不提供分发服务）
+  children.push(ctx.UI.Row({
+    horizontalArrangement: 'start',
+    verticalAlignment: 'center',
+    modifier: ctx.Modifier.padding({ bottom: 8 })
+  }, [
+    ctx.UI.Icon({ name: 'info', size: 14, tint: cs.error }),
+    ctx.UI.Spacer({ width: 6 }),
+    ctx.UI.Text({
+      text: '当前版本为中间版本，暂不提供app分发服务',
+      fontSize: 12,
+      color: cs.error
+    })
+  ]));
 
   children.push(ctx.UI.Row({ horizontalArrangement: 'spaceEvenly', fillMaxWidth: true }, [
     IconTextButton(ctx, {
-      text: label,
-      icon: s.downloadActive ? 'cloud_download' : 'download',
-      onClick: e.onInstallClient,
-      enabled: !s.clientInstalling,
+      text: '安装客户端',
+      icon: 'download',
+      onClick: e.onInstallClient, // 保留回调，但 enabled=false 不会触发
+      enabled: false,             // 置灰
       iconSize: 16,
       containerColor: cs.primary,
       contentColor: cs.onPrimary,
@@ -625,7 +635,7 @@ function renderClientCard(
       text: '刷新状态',
       icon: 'refresh',
       onClick: e.onRefreshClientStatus,
-      enabled: !s.clientInstalling,
+      enabled: false,             // 置灰
       iconSize: 16,
       containerColor: cs.secondaryContainer,
       contentColor: cs.onSecondaryContainer,

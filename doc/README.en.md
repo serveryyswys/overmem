@@ -7,7 +7,7 @@
     <br><br>
     <a href="https://github.com/serveryyswys/overmem"><img src="https://img.shields.io/badge/GitHub-OverMem-blue?style=for-the-badge&logo=github"></img></a>
     <a href="https://git.repo.archive.serveryyswys.top/serveryyswys/overmem"><img src="https://img.shields.io/badge/Gitea-OverMem-green?style=for-the-badge&logo=gitea"></img></a>
-    <img src="https://img.shields.io/badge/version-0.2.0--Beta-orange?style=for-the-badge"></img>
+    <img src="https://img.shields.io/badge/version-0.3.0--Beta-orange?style=for-the-badge"></img>
     <a href="https://github.com/serveryyswys/overmem/LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-green?style=for-the-badge"></img></a>
     <img src="https://img.shields.io/github/stars/serveryyswys/overmem?style=for-the-badge&logo=github&color=yellow"></img>
 </div>
