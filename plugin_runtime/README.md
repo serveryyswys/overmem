@@ -38,13 +38,12 @@ overmem-runtime --host 0.0.0.0 --port 8765 --mode docker  # docker 模式（强�
 | `OVERMEM_DATA_DIR` | `<base>/data` | 数据库与状态文件 |
 | `OVERMEM_JWT_SECRET` | 自动生成 `data/.jwt_secret` | JWT HS256 密钥 |
 | `OVERMEM_JWT_TTL` | `3600` | Token 有效期（秒） |
-| `OVERMEM_ADMIN_USERNAME` / `OVERMEM_ADMIN_PASSWORD` | 空 | 设置后 `/admin` 需要 HTTP Basic |
 | `OVERMEM_BOOTSTRAP_KEY` | 空 | 首次启动预置的 API Key（明文） |
 | `OVERMEM_LOGS_CAPACITY` | `500` | 环形日志缓冲条数 |
 
 ## 接口
 
-- `GET /health`（免鉴权）→ `{"ok":true,"version":"0.1.0","plugins_count":N}`
+- `GET /health`（免鉴权）→ `{"ok":true,"version":"0.1.0","mode":"ubuntu","plugins_count":N}`
 - `GET /v1/capabilities` → `[{"plugin","capability","description"}]`
 - `POST /v1/invoke` `{"plugin","capability","args"}` → `{"ok":true,"result"}` / `{"ok":false,"error":{"code","message"}}`
 - `GET /v1/plugins`、`POST /v1/plugins/install`（multipart zip）、`POST /v1/plugins/install-base64`（JSON base64）
@@ -52,7 +51,7 @@ overmem-runtime --host 0.0.0.0 --port 8765 --mode docker  # docker 模式（强�
 - `GET /v1/market/index`、`POST /v1/market/install`（501 占位）
 - `POST /v1/auth/token`（docker 模式，API Key 换 JWT）、`GET|POST /v1/keys`、`DELETE /v1/keys/{id}`
 - `GET /v1/logs?limit=100&plugin=<id>`（docker 模式需 admin）
-- `GET /admin` 静态管理后台
+- `GET /` → 302 跳 `/admin/`；`GET /admin` → 308 补斜杠；管理后台静态资源位于 `/admin/`（登录页 `/admin/login.html`）
 
 ## 插件格式
 
@@ -140,13 +139,19 @@ docker compose build && docker compose up -d
 
 - 数据卷 `overmem-runtime_overmem-data` 挂到容器 `/data`：插件在 `/data/plugins`，数据库与状态在 `/data/data`（`runtime.db`、`plugin_states.json`、`.jwt_secret`）。
 - 默认只监听 `127.0.0.1:8765`；对外提供服务时设 `OVERMEM_BIND=0.0.0.0`，并放在 HTTPS 反向代理后面。
-- 管理后台 `http://<host>:8765/admin`；设置了 `OVERMEM_ADMIN_USERNAME` / `OVERMEM_ADMIN_PASSWORD` 后走 HTTP Basic。
+- 管理后台 `http://<host>:8765/`（自动跳到 `/admin/`）；docker 模式先进登录页 `/admin/login.html`，用 API Key 换取访问令牌。
 - 容器以非 root 用户 `overmem`（uid 10001）运行。改用 bind mount（如 `./data:/data`）时，宿主机目录属主需要是 `10001:10001`。
 - 备份数据卷：`docker run --rm -v overmem-runtime_overmem-data:/data -v "$PWD":/backup alpine tar czf /backup/overmem-data.tar.gz -C /data .`
 
-### 鉴权（docker 模式）
+### 管理后台与鉴权（docker 模式）
 
-docker 模式强制 JWT：只有 `/health` 与 `/v1/auth/token` 免鉴权，其余 `/v1/*` 需要 `Authorization: Bearer <token>`；`/docs`、`/openapi.json` 关闭。
+管理后台是纯静态控制台（`overmem_runtime/static/`）：页面本身公开可达，真正的权限在数据接口——docker 模式下只有 `/health` 与 `/v1/auth/token` 免鉴权，其余 `/v1/*` 需要 `Authorization: Bearer <token>`；`/docs`、`/openapi.json` 关闭。原先的 HTTP Basic 保护已移除，改为登录页 + API Key。
+
+打开 `http://<host>:8765/`：
+
+1. 根路径 302 跳到 `/admin/`（`/admin` 308 补斜杠）。
+2. docker 模式且浏览器没有令牌时，控制台跳到登录页 `/admin/login.html`：粘贴 API Key（`data/bootstrap_key.txt` 里那一行，或 `OVERMEM_BOOTSTRAP_KEY` 的值），页面调用 `POST /v1/auth/token` 换成 JWT 并写入 localStorage。
+3. 令牌过期或失效时控制台自动回登录页；右上角用户菜单可「重新登录」「退出登录」。
 
 ```bash
 # 首次启动自动生成 bootstrap API Key（设置了 OVERMEM_BOOTSTRAP_KEY 则用它，不再写文件）
@@ -160,5 +165,7 @@ curl -s -X POST http://127.0.0.1:8765/v1/auth/token \
 # 带 JWT 调用
 curl -s http://127.0.0.1:8765/v1/capabilities -H "Authorization: Bearer <token>"
 ```
+
+ubuntu 模式不鉴权（默认只监听 127.0.0.1），控制台无需登录。
 
 > Operit 插件端的「远程连接」目前只支持免鉴权的 ubuntu 模式运行时；连 docker 模式需要先换 JWT，客户端暂未内置换取流程。

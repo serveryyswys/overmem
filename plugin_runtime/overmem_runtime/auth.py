@@ -13,7 +13,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from fastapi import Header, HTTPException, Request
+from fastapi import HTTPException, Request
 
 from overmem_runtime.config import get_config
 from overmem_runtime import logs
@@ -334,18 +334,3 @@ async def auth_middleware(request: Request, call_next):
                     logs.log("WARN", f"JWT 校验失败: {exc}")
     return await call_next(request)
 
-
-async def basic_guard(authorization: str | None = Header(default=None)) -> None:
-    """Optional HTTP Basic protection for /admin in docker mode."""
-    cfg = get_config()
-    if not (cfg.is_docker and cfg.admin_user and cfg.admin_password):
-        return
-    if not authorization or not authorization.lower().startswith("basic "):
-        raise HTTPException(status_code=401, detail="需要管理员认证", headers={"WWW-Authenticate": "Basic"})
-    try:
-        decoded = base64.b64decode(authorization[6:]).decode("utf-8")
-        user, _, password = decoded.partition(":")
-    except Exception:
-        raise HTTPException(status_code=401, detail="认证头格式错误")
-    if not (hmac.compare_digest(user, cfg.admin_user) and hmac.compare_digest(password, cfg.admin_password)):
-        raise HTTPException(status_code=401, detail="管理员凭据错误")

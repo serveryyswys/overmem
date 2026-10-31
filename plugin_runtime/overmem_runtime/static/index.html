@@ -15,14 +15,20 @@
         <p class="sub" id="subtitle">加载中…</p>
       </div>
     </div>
-    <div class="status" id="status-dot"><span class="dot"></span><span id="status-text">未连接</span></div>
+    <div class="topbar-right">
+      <div class="status" id="status-dot"><span class="dot"></span><span id="status-text">未连接</span></div>
+      <div class="user-menu" id="user-menu">
+        <button class="user-btn" id="user-btn" type="button">
+          <span class="avatar">OM</span>
+          <span id="user-state">…</span>
+        </button>
+        <div class="dropdown" id="user-dropdown">
+          <a href="./login.html" id="relogin">重新登录</a>
+          <button id="logout" type="button">退出登录</button>
+        </div>
+      </div>
+    </div>
   </header>
-
-  <section class="authbar" id="authbar" hidden>
-    <input id="token-input" type="password" placeholder="粘贴 API Key 或 JWT" />
-    <button id="token-save">获取/保存 Token</button>
-    <span id="token-state" class="muted"></span>
-  </section>
 
   <nav class="tabs" id="tabs">
     <button class="tab active" data-tab="overview">概览</button>
@@ -84,6 +90,11 @@
       <div class="logbox" id="logbox"></div>
     </section>
   </main>
+
+  <footer class="footer">
+    <span>OverMem Plugin Runtime</span>
+    <span id="footer-meta">-</span>
+  </footer>
 
   <div id="toast" class="toast" hidden></div>
   <script src="./app.js"></script>

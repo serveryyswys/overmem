@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import base64
-import hmac
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
-from fastapi.responses import Response
+from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from overmem_runtime import auth, logs
@@ -70,35 +68,16 @@ if MODE == "docker":
 app.include_router(admin.router, prefix="/v1")
 
 
-class GuardedStaticFiles(StaticFiles):
-    """Serve the console; in docker mode optionally require HTTP Basic."""
-
-    async def __call__(self, scope, receive, send):
-        cfg = get_config()
-        if cfg.is_docker and cfg.admin_user and cfg.admin_password:
-            headers = dict(scope.get("headers") or [])
-            raw = headers.get(b"authorization", b"").decode("latin-1")
-            if not self._authorized(raw):
-                response = Response(
-                    status_code=401,
-                    content="需要管理员认证",
-                    headers={"WWW-Authenticate": 'Basic realm="OverMem Runtime"'},
-                )
-                await response(scope, receive, send)
-                return
-        await super().__call__(scope, receive, send)
-
-    @staticmethod
-    def _authorized(header: str) -> bool:
-        cfg = get_config()
-        if not (header and header.lower().startswith("basic ")):
-            return False
-        try:
-            decoded = base64.b64decode(header[6:]).decode("utf-8")
-            user, _, password = decoded.partition(":")
-        except Exception:
-            return False
-        return hmac.compare_digest(user, cfg.admin_user) and hmac.compare_digest(password, cfg.admin_password)
+@app.get("/", include_in_schema=False)
+async def root() -> RedirectResponse:
+    """管后台入口：根路径直接跳到登录页/控制台。"""
+    return RedirectResponse(url="/admin/", status_code=302)
 
 
-app.mount("/admin", GuardedStaticFiles(directory=str(STATIC_DIR), html=True), name="admin")
+@app.get("/admin", include_in_schema=False)
+async def admin_without_slash() -> RedirectResponse:
+    return RedirectResponse(url="/admin/", status_code=308)
+
+
+# 控制台静态页公开可达；真正的权限在 /v1/*（docker 模式下需要 JWT）。
+app.mount("/admin", StaticFiles(directory=str(STATIC_DIR), html=True), name="admin")

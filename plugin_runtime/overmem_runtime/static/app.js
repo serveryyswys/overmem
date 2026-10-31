@@ -1,6 +1,8 @@
 /* OverMem plugin runtime console (vanilla JS, no build step). */
 (() => {
-  const state = { mode: 'ubuntu', token: localStorage.getItem('overmem_token') || '' };
+  const TOKEN_KEY = 'overmem_token';
+  const LOGIN_URL = '/admin/login.html';
+  const state = { mode: 'ubuntu', token: localStorage.getItem(TOKEN_KEY) || '' };
 
   const $ = (id) => document.getElementById(id);
   const toast = (msg, isErr) => {
@@ -11,6 +13,12 @@
     clearTimeout(toast._t);
     toast._t = setTimeout(() => { el.hidden = true; }, 2600);
   };
+
+  function logout() {
+    state.token = '';
+    localStorage.removeItem(TOKEN_KEY);
+    location.replace(LOGIN_URL);
+  }
 
   async function api(path, options = {}) {
     const opts = Object.assign({ headers: {} }, options);
@@ -23,6 +31,10 @@
     let data = null;
     try { data = await res.json(); } catch (e) { data = null; }
     if (!res.ok) {
+      if (res.status === 401) {
+        logout();
+        throw new Error('登录已过期，请重新登录');
+      }
       const detail = data && (data.detail || (data.error && data.error.message)) || res.statusText;
       throw new Error(detail || ('HTTP ' + res.status));
     }
@@ -33,10 +45,11 @@
   async function refreshHealth() {
     try {
       const data = await api('/health');
-      const dot = $('status-dot');
-      dot.className = 'status ok';
+      if (data.mode) state.mode = data.mode;
+      $('status-dot').className = 'status ok';
       $('status-text').textContent = '运行中';
       $('subtitle').textContent = 'v' + data.version + ' · ' + data.plugins_count + ' 个插件 · ' + state.mode + ' 模式';
+      $('footer-meta').textContent = 'v' + data.version + ' · ' + state.mode;
     } catch (e) {
       $('status-dot').className = 'status err';
       $('status-text').textContent = '不可用';
@@ -241,35 +254,22 @@
     ).join('') || '<span class="muted">暂无日志</span>';
   }
 
-  /* ---------- auth bar ---------- */
-  function syncAuthBar() {
-    const bar = $('authbar');
-    const keyTab = document.querySelector('.tab[data-tab="keys"]');
+  /* ---------- user menu ---------- */
+  function syncUserMenu() {
     const docker = state.mode === 'docker';
-    bar.hidden = !docker;
+    const keyTab = document.querySelector('.tab[data-tab="keys"]');
     if (keyTab) keyTab.hidden = !docker;
-    $('token-state').textContent = state.token ? '已保存 Token' : '未设置 Token';
-    $('token-input').value = state.token;
+    $('user-state').textContent = docker ? '已登录' : '本地模式';
+    $('relogin').hidden = !docker;
+    $('logout').hidden = !docker;
   }
 
-  $('token-save').addEventListener('click', async () => {
-    const raw = $('token-input').value.trim();
-    if (!raw) { state.token = ''; localStorage.removeItem('overmem_token'); syncAuthBar(); return; }
-    // A raw JWT can be used directly; an API Key is exchanged for a token.
-    let token = raw;
-    if (raw.split('.').length !== 3) {
-      try {
-        const data = await api('/v1/auth/token', { method: 'POST', body: { api_key: raw } });
-        token = data.token;
-      } catch (e) { toast('获取 Token 失败: ' + e.message, true); return; }
-    }
-    state.token = token;
-    localStorage.setItem('overmem_token', token);
-    syncAuthBar();
-    toast('Token 已保存');
-    refreshHealth();
-    switchTab(activeTab);
+  $('user-btn').addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    $('user-dropdown').classList.toggle('open');
   });
+  document.addEventListener('click', () => $('user-dropdown').classList.remove('open'));
+  $('logout').addEventListener('click', logout);
 
   function esc(v) {
     return String(v === undefined || v === null ? '' : v)
@@ -280,13 +280,18 @@
   document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => switchTab(t.dataset.tab)));
 
   (async () => {
-    syncAuthBar();
-    await refreshHealth();
     try {
-      const data = await api('/v1/plugins');
-      state.mode = data.mode || 'ubuntu';
-    } catch (e) { /* check health output */ }
-    syncAuthBar();
+      const res = await fetch('/health', { headers: { Accept: 'application/json' } });
+      const data = await res.json();
+      if (data.mode) state.mode = data.mode;
+    } catch (e) { /* keep defaults */ }
+    if (state.mode === 'docker' && !state.token) {
+      location.replace(LOGIN_URL);
+      return;
+    }
+    syncUserMenu();
+    await refreshHealth();
+    syncUserMenu();
     switchTab('overview');
     setInterval(refreshHealth, 15000);
   })();

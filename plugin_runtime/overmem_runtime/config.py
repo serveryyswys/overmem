@@ -27,8 +27,6 @@ class RuntimeConfig:
     token_file: Path
     jwt_secret: str
     jwt_ttl_seconds: int
-    admin_user: str
-    admin_password: str
     logs_capacity: int
 
     @property
@@ -80,8 +78,6 @@ def load_config() -> RuntimeConfig:
         token_file=base_dir / ".runtime_token",
         jwt_secret=_read_or_create_secret(data_dir / ".jwt_secret"),
         jwt_ttl_seconds=max(60, ttl),
-        admin_user=os.environ.get("OVERMEM_ADMIN_USERNAME", "").strip(),
-        admin_password=os.environ.get("OVERMEM_ADMIN_PASSWORD", ""),
         logs_capacity=max(50, capacity),
     )
 

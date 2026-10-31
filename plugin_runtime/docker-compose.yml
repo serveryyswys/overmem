@@ -22,9 +22,6 @@ services:
       # 不设则首次启动随机生成并持久化到 /data/data/.jwt_secret
       OVERMEM_JWT_SECRET: ${OVERMEM_JWT_SECRET:-}
       OVERMEM_JWT_TTL: ${OVERMEM_JWT_TTL:-3600}
-      # 设置后 /admin 管理后台走 HTTP Basic
-      OVERMEM_ADMIN_USERNAME: ${OVERMEM_ADMIN_USERNAME:-}
-      OVERMEM_ADMIN_PASSWORD: ${OVERMEM_ADMIN_PASSWORD:-}
       # 首次启动预置的 API Key（不设则自动生成并写入 /data/data/bootstrap_key.txt）
       OVERMEM_BOOTSTRAP_KEY: ${OVERMEM_BOOTSTRAP_KEY:-}
       OVERMEM_LOGS_CAPACITY: ${OVERMEM_LOGS_CAPACITY:-500}
